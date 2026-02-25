@@ -158,12 +158,15 @@ def analyze_latin_honors(user_id):
     - Summa: 1.00 - 1.20
     - Magna: 1.21 - 1.45
     - Cum Laude: 1.46 - 1.75
-    - Requirements: No failing grades (>3.0), no grade below 2.5
+    - Requirements: No failing grades (>3.0), no grade below 2.5, full load per semester
     """
     grades = SubjectGrade.query.filter_by(user_id=user_id).all()
     if not grades:
         return {"eligible": False, "reason": "No grades recorded", "title": None}
 
+    # Group by semester to check load (CTU regular load is typically 18+ units, or all prescribed)
+    # For simplicity, we'll check if any major semester has < 15 units
+    semester_loads = {}
     total_units = 0
     total_weighted_grade = 0
     has_failed = False
@@ -173,7 +176,7 @@ def analyze_latin_honors(user_id):
         if g.grade is None or g.units is None:
             continue
 
-        # Exclude NSTP/ROTC from GWA if mentioned in subject name (common practice)
+        # Exclude NSTP/ROTC from GWA
         subj_upper = (g.subject or "").upper()
         if "NSTP" in subj_upper or "ROTC" in subj_upper:
             continue
@@ -181,21 +184,34 @@ def analyze_latin_honors(user_id):
         total_units += g.units
         total_weighted_grade += (g.units * g.grade)
 
+        # Track semester loads (excluding summer for load check)
+        if g.semester != 3: # 3 is Summer
+            key = f"{g.year}-{g.semester}"
+            semester_loads[key] = semester_loads.get(key, 0) + g.units
+
         if g.grade > 3.0:
             has_failed = True
         if g.grade > 2.5:
             has_below_2_5 = True
 
+    # CTU Residency & Load Check: Must maintain full load
+    # Normal semester load is 15+ units. Irregular if any sem < 15 units.
+    underloaded = any(load < 15 for load in semester_loads.values()) if semester_loads else False
+
     if total_units == 0:
-        return {"eligible": False, "reason": "No valid academic units", "title": None}
+        return {"eligible": False, "reason": "No valid academic units", "title": None, "status": "Regular"}
 
     gwa = round(total_weighted_grade / total_units, 3)
+    status = "Irregular" if underloaded else "Regular"
 
     if has_failed:
-        return {"eligible": False, "reason": "Has failing grades", "title": None, "gwa": gwa}
+        return {"eligible": False, "reason": "Has failing grades (>3.0)", "title": None, "gwa": gwa, "status": status}
     
     if has_below_2_5:
-        return {"eligible": False, "reason": "Has grades below 2.50", "title": None, "gwa": gwa}
+        return {"eligible": False, "reason": "Has grades below 2.50", "title": None, "gwa": gwa, "status": status}
+
+    if underloaded:
+         return {"eligible": False, "reason": "Underloaded in one or more semesters", "title": None, "gwa": gwa, "status": "Irregular"}
 
     title = None
     if 1.00 <= gwa <= 1.20:
@@ -206,9 +222,9 @@ def analyze_latin_honors(user_id):
         title = "Cum Laude"
 
     if title:
-        return {"eligible": True, "reason": "Meets all criteria", "title": title, "gwa": gwa}
+        return {"eligible": True, "reason": "Meets all CTU academic criteria", "title": title, "gwa": gwa, "status": status}
     else:
-        return {"eligible": False, "reason": "GWA does not meet honors cutoff", "title": None, "gwa": gwa}
+        return {"eligible": False, "reason": "GWA does not meet honors cutoff", "title": None, "gwa": gwa, "status": status}
 
 # --- Error Handlers ---
 @app.errorhandler(429)
@@ -391,10 +407,23 @@ def api_grades():
         return jsonify({'error':'Grade must be between 1.0 (highest) and 5.0 (lowest)'}), 400
     if units <= 0:
         return jsonify({'error':'Units must be positive'}), 400
+    # Auto-post achievement if GWA improved significantly
+    old_gwa = compute_gwa_for_user(user_id)
+    
     g = SubjectGrade(user_id=user_id, subject=subject, units=units, grade=grade, year=year, semester=semester)
     db.session.add(g)
     db.session.commit()
+    
     gwa = compute_gwa_for_user(user_id)
+    
+    if gwa and (old_gwa is None or gwa < old_gwa) and gwa <= 2.0:
+        achievement = Post(
+            user_id=user_id, 
+            content=f"🎉 ACHIEVEMENT: Just updated my grades and my GWA is now {gwa}! Target: Latin Honors! 🎓 #CTU #GWAcalculator"
+        )
+        db.session.add(achievement)
+        db.session.commit()
+
     # compute failed subjects
     failed = SubjectGrade.query.filter(SubjectGrade.user_id==user_id, SubjectGrade.grade>3.0).count()
     return jsonify({'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'year': g.year, 'semester': g.semester, 'failed': g.is_failed(), 'gwa': gwa, 'failed_count': failed})

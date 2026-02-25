@@ -9,7 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const views = {
     overview: 'Dashboard Overview',
     grades: 'My Evaluation',
-    social: 'Student Feed'
+    social: 'Student Feed',
+    handbook: 'Student Handbook'
   };
 
   sidebarLinks.forEach(link => {
@@ -32,6 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Special init for views
       if (viewId === 'overview') initGwaChart();
       if (viewId === 'social') refreshPosts();
+      if (viewId === 'handbook') {
+        // Scroll to top when opening handbook
+        document.querySelector('main').scrollTop = 0;
+      }
     });
   });
 
@@ -106,7 +111,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderPost(p) {
     const article = document.createElement('article');
-    article.className = 'bg-white p-6 rounded-2xl border border-black/5 shadow-sm space-y-4';
+    // Check if it's a special achievement post
+    const isAchievement = p.content.includes('🎉 ACHIEVEMENT:') || p.content.includes('academic milestone');
+    
+    article.className = `p-6 rounded-3xl border shadow-sm space-y-4 transition-all ${
+      isAchievement 
+        ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 ring-1 ring-blue-200' 
+        : 'bg-white border-slate-200'
+    }`;
     article.dataset.id = p.id;
 
     const reactionTypes = ['like', 'love', 'wow'];
