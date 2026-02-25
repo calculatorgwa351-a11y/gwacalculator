@@ -12,13 +12,44 @@ def seed():
             cote = Department(name='COTE')
             db.session.add(cote)
             db.session.commit()
-            courses = ['Computer Science', 'Computer Engineering', 'Information Technology']
+            
+            # Latest COTE programs for CTU San Francisco
+            courses = [
+                'Bachelor of Industrial Technology - Computer Technology (BIT-CT)',
+                'Bachelor of Industrial Technology - Electronics Technology (BIT-ET)',
+                'Bachelor of Science in Industrial Engineering (BSIE)',
+                'Bachelor of Science in Fishery (BSFi)'
+            ]
             for c in courses:
                 db.session.add(Course(name=c, department_id=cote.id))
+            
+            # Adding other Colleges for a complete SIS feel
+            coed = Department(name='COED')
+            db.session.add(coed)
+            db.session.commit()
+            coed_courses = [
+                'Bachelor of Elementary Education (BEEd)',
+                'Bachelor of Technology and Livelihood Education (BTLED) - Home Economics',
+                'Bachelor of Secondary Education (BSEd) - Mathematics',
+                'Bachelor of Secondary Education (BSEd) - Sciences'
+            ]
+            for c in coed_courses:
+                db.session.add(Course(name=c, department_id=coed.id))
+
+            cobm = Department(name='COBM')
+            db.session.add(cobm)
+            db.session.commit()
+            cobm_courses = [
+                'Bachelor of Science in Hospitality Management (BSHM)',
+                'Bachelor of Science in Tourism Management (BSTM)'
+            ]
+            for c in cobm_courses:
+                db.session.add(Course(name=c, department_id=cobm.id))
+
             db.session.commit()
 
         if not User.query.filter_by(school_id='2026001').first():
-            user = User(school_id='2026001', name='Sample Student', department='COTE', course='Computer Science')
+            user = User(school_id='2026001', name='Sample Student', department='COTE', course='Bachelor of Industrial Technology - Computer Technology (BIT-CT)')
             user.set_password('password')
             db.session.add(user)
             db.session.commit()
