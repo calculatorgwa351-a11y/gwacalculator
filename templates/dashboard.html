@@ -2,156 +2,173 @@
 {% block title %}Dashboard - GWAcalculator{% endblock %}
 {% block content %}
 <script>window.userId = {{ user.id }};</script>
-<div class="flex flex-col lg:flex-row gap-8">
-  <!-- Sidebar -->
-  <aside class="w-full lg:w-64 lg:shrink-0 space-y-6">
-    <div class="bg-gray-50/50 p-6 rounded-2xl border border-black/5">
-      <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Academic Programs</h3>
-      <div class="space-y-2">
-        {% for d in departments %}
-        <details class="group">
-          <summary
-            class="flex items-center justify-between p-2 rounded-xl hover:bg-black/5 cursor-pointer font-medium transition-all">
-            {{ d.name }}
-            <span class="text-gray-400 group-open:rotate-180 transition-transform">↓</span>
-          </summary>
-          <ul class="mt-2 ml-4 space-y-1 text-sm text-gray-500 font-medium">
-            {% for c in d.courses %}
-            <li class="p-2 border-l-2 border-transparent">· {{ c.name }}</li>
-            {% endfor %}
-          </ul>
-        </details>
-        {% endfor %}
-      </div>
-    </div>
-  </aside>
 
-  <!-- Feed section -->
-  <section class="flex-1 space-y-6">
-    <div class="bg-white p-6 rounded-2xl border border-black/5 shadow-sm">
-      <h3 class="text-lg font-bold mb-4">GWA Trend</h3>
-      <div class="h-48 w-full">
-        <canvas id="gwaChart"></canvas>
+<!-- View: Overview -->
+<div id="view-overview" class="view-section space-y-8 animate-in fade-in duration-500">
+  <!-- Stats Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+      <div class="flex items-center gap-4 mb-2 text-blue-600">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        <span class="text-xs font-black uppercase tracking-widest text-slate-400">Total GWA</span>
       </div>
+      <div class="text-4xl font-black text-slate-900 tracking-tight" id="overview-gwa">{{ gwa if gwa is not none else '—' }}</div>
+      <p class="text-xs text-slate-400 mt-1 font-medium italic">Based on all evaluated subjects</p>
     </div>
 
-    <div class="bg-white p-6 rounded-2xl border border-black/5 shadow-sm space-y-4">
-      <textarea id="postContent" placeholder="What's on your mind, {{ user.name }}?" rows="3"
-        class="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all"></textarea>
-      <div class="flex justify-end">
-        <button id="postBtn"
-          class="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all">Post
-          Update</button>
+    <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+      <div class="flex items-center gap-4 mb-2 text-orange-500">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        <span class="text-xs font-black uppercase tracking-widest text-slate-400">Honors Eligibility</span>
       </div>
+      <div class="text-lg font-black text-slate-900">{{ honors.title if honors.title else 'Not Eligible' }}</div>
+      <p class="text-[10px] text-slate-400 mt-1 font-medium leading-tight">{{ honors.reason }}</p>
     </div>
 
-    <div id="posts" class="space-y-6">
-      <!-- Posts will be populated by JS -->
-      <div class="animate-pulse space-y-4">
-        <div class="h-4 bg-gray-100 rounded w-3/4"></div>
-        <div class="h-24 bg-gray-50 rounded"></div>
+    <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+      <div class="flex items-center gap-4 mb-2 text-indigo-600">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H5a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+        <span class="text-xs font-black uppercase tracking-widest text-slate-400">Course & Dept</span>
+      </div>
+      <div class="text-lg font-black text-slate-900 truncate">{{ user.course }}</div>
+      <div class="flex gap-2 mt-1">
+        <span class="px-2 py-0.5 bg-slate-100 text-[10px] font-bold rounded-md text-slate-500">{{ user.department }}</span>
+        <span class="px-2 py-0.5 bg-blue-100 text-[10px] font-bold rounded-md text-blue-600 uppercase">Regular</span>
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- Grade Panel -->
-  <aside class="w-full lg:w-80 lg:shrink-0 space-y-6">
-    <div class="bg-white p-6 rounded-2xl border border-black/5 shadow-sm">
-      <h3 class="text-lg font-bold mb-4">Academic Entry</h3>
-      <div class="space-y-3">
-        <input id="subject" placeholder="Course Title (e.g. IT 111)"
-          class="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
-        <div class="flex gap-2">
-          <select id="year" class="w-1/2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-            <option value="1">1st Year</option>
-            <option value="2">2nd Year</option>
-            <option value="3">3rd Year</option>
-            <option value="4">4th Year</option>
-          </select>
-          <select id="semester" class="w-1/2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-            <option value="1">1st Sem</option>
-            <option value="2">2nd Sem</option>
-            <option value="3">Summer</option>
-          </select>
-        </div>
-        <div class="flex gap-2">
-          <input id="units" type="number" step="0.5" placeholder="Units" value="3"
-            class="w-1/2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
-          <input id="grade" type="number" step="0.01" placeholder="Grade"
-            class="w-1/2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
-        </div>
-        <button id="addGrade"
-          class="w-full py-3 bg-green-500 text-white font-bold rounded-xl hover:bg-green-600 transition-colors shadow-lg shadow-green-500/10">Add
-          To Records</button>
+  <!-- Chart Section -->
+  <div class="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+    <div class="flex justify-between items-center mb-8">
+      <div>
+        <h3 class="text-xl font-black text-slate-800 tracking-tight">Academic Performance Timeline</h3>
+        <p class="text-sm text-slate-400 font-medium">Visualization of your weighted average progression</p>
       </div>
     </div>
+    <div class="h-[300px] w-full">
+      <canvas id="gwaChart"></canvas>
+    </div>
+  </div>
+</div>
 
-    <div class="bg-white p-6 rounded-2xl border border-black/5 shadow-sm">
-      <button id="toggleGrades" class="w-full flex justify-between items-center mb-4 group">
-        <div class="flex items-center gap-2">
-          <h3 class="text-lg font-bold">Your Grades</h3>
-          <span class="text-xs bg-gray-100 px-2 py-1 rounded-lg text-gray-500 font-bold uppercase">Weighted</span>
-        </div>
-        <svg id="chevronIcon" class="w-5 h-5 text-gray-400 group-hover:text-black transition-transform duration-300"
-          fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-        <div id="gradesContent" class="transition-all duration-300 overflow-hidden">
-          <div class="flex gap-2 mb-4">
-            <button id="exportCsv" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition-all">Export CSV</button>
+<!-- View: Grades (My Evaluation) -->
+<div id="view-grades" class="view-section hidden space-y-8 animate-in fade-in duration-500">
+  <div class="flex flex-col lg:flex-row gap-8">
+    <!-- Form -->
+    <div class="lg:w-1/3 space-y-6">
+      <div class="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm sticky top-24">
+        <h3 class="text-xl font-black text-slate-800 tracking-tight mb-6">Subject Entry</h3>
+        <div class="space-y-4">
+          <div class="space-y-1">
+            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Course Description</label>
+            <input id="subject" placeholder="e.g. Data Structures"
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-medium">
           </div>
-          <ul id="gradeList" class="space-y-3 mb-6">
-          <!-- Grades populated by JS -->
-          {% for g in grades %}
-          <li data-id="{{ g.id }}"
-            class="flex justify-between items-center bg-gray-50/50 p-3 rounded-xl border border-black/5">
-            <div>
-              <div class="font-bold text-sm">{{ g.subject }}</div>
-              <div class="text-[10px] text-gray-400 uppercase font-medium">Y{{ g.year }} S{{ g.semester }} • {{ g.units }} units</div>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Year</label>
+              <select id="year" class="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold">
+                <option value="1">1st Year</option>
+                <option value="2">2nd Year</option>
+                <option value="3">3rd Year</option>
+                <option value="4">4th Year</option>
+              </select>
             </div>
-            <div class="flex items-center gap-3">
-              <span class="font-bold text-blue-600">{{ g.grade }}</span>
-              <button class="editGrade text-gray-300 hover:text-black transition-colors">✎</button>
+            <div class="space-y-1">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Sem</label>
+              <select id="semester" class="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold">
+                <option value="1">1st Sem</option>
+                <option value="2">2nd Sem</option>
+                <option value="3">Summer</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Units</label>
+              <input id="units" type="number" step="0.5" value="3"
+                class="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-center">
+            </div>
+            <div class="space-y-1">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Grade</label>
+              <input id="grade" type="number" step="0.01" placeholder="1.0-5.0"
+                class="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-center text-blue-600">
+            </div>
+          </div>
+
+          <button id="addGrade"
+            class="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 mt-2">
+            Record Grade
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- List -->
+    <div class="lg:w-2/3">
+      <div class="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm min-h-[600px]">
+        <div class="flex justify-between items-center mb-8">
+          <div>
+            <h3 class="text-xl font-black text-slate-800 tracking-tight">Evaluated Subjects</h3>
+            <p class="text-sm text-slate-400 font-medium italic">Official academic record summary</p>
+          </div>
+          <button id="exportCsv" class="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-bold transition-all">Export CSV</button>
+        </div>
+
+        <ul id="gradeList" class="divide-y divide-slate-50">
+          {% for g in grades %}
+          <li data-id="{{ g.id }}" class="py-4 flex justify-between items-center group">
+            <div class="flex items-center gap-4">
+              <div class="w-10 h-10 bg-slate-50 rounded-xl flex flex-col items-center justify-center border border-slate-100">
+                <span class="text-[8px] font-black text-slate-400 leading-none">YR</span>
+                <span class="text-xs font-black text-slate-800">{{ g.year }}</span>
+              </div>
+              <div>
+                <div class="font-bold text-slate-800">{{ g.subject }}</div>
+                <div class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">SEM {{ g.semester }} • {{ g.units }} UNITS</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-6">
+              <div class="text-right">
+                <div class="text-lg font-black {{ 'text-red-500' if g.grade > 3.0 else 'text-blue-600' }} tracking-tighter">{{ g.grade }}</div>
+                <div class="text-[8px] font-black uppercase text-slate-300">Mark</div>
+              </div>
+              <button class="editGrade p-2 text-slate-200 hover:text-slate-900 transition-colors opacity-0 group-hover:opacity-100">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
             </div>
           </li>
           {% endfor %}
         </ul>
-        <div class="pt-4 border-t border-black/5 flex justify-between items-center mb-6">
-          <span class="text-sm font-medium text-gray-500">Total GWA</span>
-          <span id="gwa" class="text-2xl font-black text-black tracking-tight">{{ gwa if gwa is not none else '—'
-            }}</span>
-        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-        <!-- System Feedback Message -->
-        <div id="honorsPanel" class="mt-4 p-4 rounded-2xl border {% if honors.eligible %}bg-blue-50 border-blue-100 text-blue-700{% else %}bg-gray-50 border-gray-100 text-gray-500{% endif %}">
-          <div class="flex items-center gap-3">
-            <span class="text-2xl">🎓</span>
-            <div>
-              <h5 class="font-bold text-xs uppercase tracking-widest">Latin Honors Status</h5>
-              <p class="text-sm font-black">{{ honors.title if honors.title else 'Not Eligible' }}</p>
-              {% if not honors.eligible %}
-              <p class="text-[10px] opacity-70">{{ honors.reason }}</p>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-
-        <div id="gwaFeedback"
-          class="hidden p-5 rounded-2xl border transition-all duration-500 animate-in fade-in slide-in-from-top-2">
-          <div class="flex items-start gap-4">
-            <div id="gwaEmoji" class="text-3xl shrink-0">🏆</div>
-            <div class="space-y-1">
-              <h4 id="gwaLevel" class="font-black text-sm uppercase tracking-widest">Excellence</h4>
-              <p id="gwaQuote" class="text-sm italic leading-relaxed text-gray-600 opacity-90"></p>
-            </div>
-          </div>
+<!-- View: Social (Student Feed) -->
+<div id="view-social" class="view-section hidden max-w-2xl mx-auto space-y-6 animate-in fade-in duration-500">
+  <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+    <div class="flex gap-4">
+      <div class="w-10 h-10 bg-blue-600 rounded-full flex-shrink-0 flex items-center justify-center text-white font-black">{{ user.name[0] }}</div>
+      <div class="flex-1 space-y-4">
+        <textarea id="postContent" placeholder="Share updates with your department..."
+          class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 resize-none min-h-[100px]"></textarea>
+        <div class="flex justify-end">
+          <button id="postBtn" class="px-6 py-2.5 bg-blue-600 text-white font-black rounded-xl text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">Share Post</button>
         </div>
       </div>
     </div>
-</div>
-</aside>
+  </div>
+
+  <div id="posts" class="space-y-6">
+    <div class="animate-pulse space-y-4">
+      <div class="h-4 bg-slate-100 rounded w-3/4"></div>
+      <div class="h-32 bg-slate-50 rounded-3xl"></div>
+    </div>
+  </div>
 </div>
 
 <script>

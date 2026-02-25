@@ -1,63 +1,39 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // GWA Feedback Logic
-  function updateGwaFeedback(gwa) {
-    const feedbackBox = document.getElementById('gwaFeedback');
-    const gwaEmoji = document.getElementById('gwaEmoji');
-    const gwaLevel = document.getElementById('gwaLevel');
-    const gwaQuote = document.getElementById('gwaQuote');
-    const gVal = parseFloat(gwa);
+  // No longer used: GWA Feedback logic
 
-    if (!feedbackBox || isNaN(gVal)) return;
+  // Navigation Logic (SIS Style)
+  const sidebarLinks = document.querySelectorAll('.sidebar-link');
+  const viewSections = document.querySelectorAll('.view-section');
+  const viewTitle = document.getElementById('viewTitle');
 
-    feedbackBox.classList.remove('hidden');
-    let config = {};
+  const views = {
+    overview: 'Dashboard Overview',
+    grades: 'My Evaluation',
+    social: 'Student Feed'
+  };
 
-    if (gVal >= 1.0 && gVal <= 1.5) {
-      config = {
-        emoji: '🏆', level: 'Excellent',
-        quotes: ['“Excellence is not an act, it’s a habit.”', '“Your hard work truly paid off—keep aiming high.”'],
-        theme: 'bg-yellow-50 border-yellow-100 text-yellow-700'
-      };
-    } else if (gVal > 1.5 && gVal <= 1.75) {
-      config = {
-        emoji: '🥇', level: 'Very Good',
-        quotes: ['“Great job! You’re closer to excellence than you think.”', '“Consistency is turning your effort into success.”'],
-        theme: 'bg-blue-50 border-blue-100 text-blue-700'
-      };
-    } else if (gVal > 1.75 && gVal <= 2.25) {
-      config = {
-        emoji: '🥈', level: 'Good',
-        quotes: ['“Good work—keep pushing, you’re on the right path.”', '“This is progress. Don’t stop improving."'],
-        theme: 'bg-indigo-50 border-indigo-100 text-indigo-700'
-      };
-    } else if (gVal > 2.25 && gVal <= 2.75) {
-      config = {
-        emoji: '🥉', level: 'Satisfactory',
-        quotes: ['“You passed, and that means you’re moving forward.”', '“There’s room to grow—and you can do better next time.”'],
-        theme: 'bg-green-50 border-green-100 text-green-700'
-      };
-    } else if (gVal > 2.75 && gVal <= 3.0) {
-      config = {
-        emoji: '⚠️', level: 'Passing',
-        quotes: ['“Passing is still winning—never give up.”', '“This grade does not define your potential.”'],
-        theme: 'bg-orange-50 border-orange-100 text-orange-700'
-      };
-    } else if (gVal >= 5.0) {
-      config = {
-        emoji: '❌', level: 'Failing',
-        quotes: ['“Failure is not the opposite of success; it’s part of it.”', '“Stand up, learn from it, and try again stronger.”'],
-        theme: 'bg-red-50 border-red-100 text-red-700'
-      };
-    } else {
-      feedbackBox.classList.add('hidden');
-      return;
-    }
+  sidebarLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      const viewId = link.dataset.view;
+      
+      // Update UI
+      sidebarLinks.forEach(l => {
+        l.classList.remove('active', 'bg-blue-600', 'text-white');
+        l.classList.add('text-slate-600');
+      });
+      link.classList.add('active', 'bg-blue-600', 'text-white');
+      link.classList.remove('text-slate-600');
 
-    feedbackBox.className = `p-5 rounded-2xl border transition-all duration-500 animate-in fade-in slide-in-from-top-2 ${config.theme}`;
-    gwaEmoji.textContent = config.emoji;
-    gwaLevel.textContent = `${config.level} (${gVal.toFixed(3)})`;
-    gwaQuote.innerHTML = config.quotes.join('<br>');
-  }
+      viewSections.forEach(s => s.classList.add('hidden'));
+      document.getElementById(`view-${viewId}`).classList.remove('hidden');
+      
+      if (viewTitle) viewTitle.textContent = views[viewId];
+
+      // Special init for views
+      if (viewId === 'overview') initGwaChart();
+      if (viewId === 'social') refreshPosts();
+    });
+  });
 
   // GWA Chart Logic
   let gwaChart;
@@ -106,13 +82,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Initial GWA Call
+  // Initial UI Setup
   const gwaEl = document.getElementById('gwa');
-  if (gwaEl) {
-      const initialGwa = gwaEl.textContent;
-      if (initialGwa && initialGwa !== '—') updateGwaFeedback(initialGwa);
-    }
+  const overviewGwaSpan = document.getElementById('overview-gwa');
+
+  if (gwaEl || overviewGwaSpan) {
     initGwaChart();
+    refreshPosts();
+  }
 
     // Post elements
   const postBtn = document.getElementById('postBtn');
@@ -270,7 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (gwaSpan) gwaSpan.textContent = json.gwa || '—';
         if (json.gwa) {
-          updateGwaFeedback(json.gwa);
           initGwaChart();
         }
         // Refresh honors status (reload or fetch)
