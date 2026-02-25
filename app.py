@@ -30,6 +30,13 @@ CORS(app, origins=app.config.get('CORS_ALLOWED_ORIGINS', '*'))
 db = SQLAlchemy(app)
 
 # --- Utils ---
+@app.context_processor
+def inject_user():
+    user = None
+    if 'user_id' in session:
+        user = db.session.get(User, session['user_id'])
+    return dict(current_user=user)
+
 def is_safe_url(target):
     ref_url = urlparse(request.host_url)
     test_url = urlparse(urljoin(request.host_url, target))
@@ -139,10 +146,10 @@ def admin_required(f):
 # --- Utility functions ---
 def compute_gwa_for_user(user_id):
     grades = SubjectGrade.query.filter_by(user_id=user_id).all()
-    total_units = sum(g.units for g in grades)
+    total_units = sum(g.units for g in grades if g.units is not None and g.grade is not None)
     if total_units == 0:
         return None
-    total = sum(g.units * g.grade for g in grades)
+    total = sum(g.units * g.grade for g in grades if g.units is not None and g.grade is not None)
     return round(total / total_units, 3)
 
 def analyze_latin_honors(user_id):
@@ -161,11 +168,13 @@ def analyze_latin_honors(user_id):
     total_weighted_grade = 0
     has_failed = False
     has_below_2_5 = False
-    lowest_grade = 5.0
 
     for g in grades:
+        if g.grade is None or g.units is None:
+            continue
+
         # Exclude NSTP/ROTC from GWA if mentioned in subject name (common practice)
-        subj_upper = g.subject.upper()
+        subj_upper = (g.subject or "").upper()
         if "NSTP" in subj_upper or "ROTC" in subj_upper:
             continue
 
@@ -176,13 +185,6 @@ def analyze_latin_honors(user_id):
             has_failed = True
         if g.grade > 2.5:
             has_below_2_5 = True
-        
-        if g.grade > lowest_grade: # In PH, 5.0 is worse than 1.0
-             pass # Logic check: we want to track the 'worst' grade value
-        
-        # Track the numerical worst grade (highest number)
-        if lowest_grade == 5.0 or g.grade > lowest_grade:
-             lowest_grade = g.grade
 
     if total_units == 0:
         return {"eligible": False, "reason": "No valid academic units", "title": None}
