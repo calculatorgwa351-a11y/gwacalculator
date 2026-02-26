@@ -21,8 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function toggleSidebar(show) {
     if (show) {
-      sidebar.classList.remove('hidden', '-translate-x-full');
-      sidebar.classList.add('flex', 'translate-x-0');
+      sidebar.classList.remove('hidden');
+      // Force reflow
+      sidebar.offsetHeight;
+      sidebar.classList.remove('-translate-x-full');
+      sidebar.classList.add('translate-x-0', 'flex');
       mobileOverlay.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
     } else {
@@ -30,10 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
       sidebar.classList.remove('translate-x-0');
       mobileOverlay.classList.add('hidden');
       document.body.style.overflow = '';
-      // On small screens, hide after transition
       setTimeout(() => {
-        if (window.innerWidth < 768) {
+        if (window.innerWidth < 768 && sidebar.classList.contains('-translate-x-full')) {
           sidebar.classList.add('hidden');
+          sidebar.classList.remove('flex');
         }
       }, 300);
     }
