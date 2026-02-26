@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from functools import wraps
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -32,10 +32,11 @@ db = SQLAlchemy(app)
 # --- Utils ---
 @app.context_processor
 def inject_user():
-    user = None
-    if 'user_id' in session:
-        user = db.session.get(User, session['user_id'])
-    return dict(current_user=user)
+    if 'current_user' not in g:
+        g.current_user = None
+        if 'user_id' in session:
+            g.current_user = db.session.get(User, session['user_id'])
+    return dict(current_user=g.current_user)
 
 def is_safe_url(target):
     ref_url = urlparse(request.host_url)
@@ -43,13 +44,15 @@ def is_safe_url(target):
     return test_url.scheme in ('http', 'https') and \
            ref_url.netloc == test_url.netloc
 
+from sqlalchemy.orm import joinedload, subqueryload
+
 # --- Models ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    school_id = db.Column(db.String(64), unique=True, nullable=False)
+    school_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
     name = db.Column(db.String(120), nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    department = db.Column(db.String(64))
+    department = db.Column(db.String(64), index=True)
     course = db.Column(db.String(128))
 
     posts = db.relationship('Post', backref='author', lazy=True, cascade="all, delete-orphan")
@@ -73,21 +76,21 @@ class Course(db.Model):
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
     content = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     reactions = db.relationship('Reaction', backref='post', lazy=True, cascade="all, delete-orphan")
     comments = db.relationship('Comment', backref='post', lazy=True, cascade="all, delete-orphan")
 
 class Reaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.Integer, db.ForeignKey('post.id'))
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     type = db.Column(db.String(32), default='like')  # like, love, wow, etc.
 
 class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.Integer, db.ForeignKey('post.id'))
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     author = db.relationship('User', backref='user_comments', lazy=True)
     content = db.Column(db.Text, nullable=False)
@@ -95,7 +98,7 @@ class Comment(db.Model):
 
 class SubjectGrade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
     subject = db.Column(db.String(128))
     units = db.Column(db.Float, default=3.0)
     grade = db.Column(db.Float)
@@ -293,12 +296,25 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    user = User.query.get(session['user_id'])
+    # Eager load relationships that are needed in the template
+    user = User.query.options(
+        subqueryload(User.grades)
+    ).get(session['user_id'])
+    
     departments = Department.query.all()
-    posts = Post.query.order_by(Post.timestamp.desc()).limit(50).all()
-    grades = SubjectGrade.query.filter_by(user_id=user.id).all()
+    
+    # Eager load author for posts in dashboard
+    posts = Post.query.options(
+        joinedload(Post.author)
+    ).order_by(Post.timestamp.desc()).limit(50).all()
+    
+    # We can use the pre-loaded user.grades here
+    grades = user.grades
+    
+    # Optimization: calculate GWA once
     gwa = compute_gwa_for_user(user.id)
     honors = analyze_latin_honors(user.id)
+    
     return render_template('dashboard.html', user=user, departments=departments, posts=posts, grades=grades, gwa=gwa, honors=honors)
 
 # API: posts
@@ -306,7 +322,13 @@ def dashboard():
 @login_required
 def api_posts():
     if request.method == 'GET':
-        posts = Post.query.order_by(Post.timestamp.desc()).limit(100).all()
+        # Optimize with joinedload for author and subqueryload for comments/reactions
+        posts = Post.query.options(
+            joinedload(Post.author),
+            subqueryload(Post.reactions),
+            subqueryload(Post.comments).joinedload(Comment.author)
+        ).order_by(Post.timestamp.desc()).limit(100).all()
+        
         data = []
         for p in posts:
             # build reaction summary by type
@@ -463,18 +485,21 @@ def api_update_grade(grade_id):
 @app.route('/api/analytics', methods=['GET'])
 @login_required
 def api_analytics():
-    # summary analytics
-    users = User.query.all()
+    # summary analytics - optimized with joinedload
+    users = User.query.options(subqueryload(User.grades)).all()
     gwas = []
     total_subjects = 0
     failed_subjects = 0
     for u in users:
-        grades = SubjectGrade.query.filter_by(user_id=u.id).all()
-        total_subjects += len(grades)
-        failed_subjects += sum(1 for g in grades if g.grade>3.0)
-        gwa = compute_gwa_for_user(u.id)
-        if gwa is not None:
-            gwas.append(gwa)
+        total_subjects += len(u.grades)
+        failed_subjects += sum(1 for g in u.grades if g.grade > 3.0)
+        
+        # Calculate GWA from pre-loaded grades
+        total_u_units = sum(g.units for g in u.grades if g.units and g.grade)
+        if total_u_units > 0:
+            total_points = sum(g.units * g.grade for g in u.grades if g.units and g.grade)
+            gwas.append(round(total_points / total_u_units, 3))
+            
     avg_gwa = round(sum(gwas)/len(gwas),3) if gwas else None
     fail_rate = (failed_subjects/total_subjects) if total_subjects>0 else None
     return jsonify({'average_gwa': avg_gwa, 'failure_rate': fail_rate})

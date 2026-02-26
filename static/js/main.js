@@ -144,15 +144,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Post elements
   const postBtn = document.getElementById('postBtn');
+  const refreshFeedBtn = document.getElementById('refreshFeed');
   const postContent = document.getElementById('postContent');
   const postsDiv = document.getElementById('posts');
 
-  async function refreshPosts() {
+  // Simple client-side cache
+  let postsCache = null;
+
+  async function refreshPosts(force = false) {
     if (!postsDiv) return;
-    const res = await fetch('/api/posts');
-    const data = await res.json();
+    
+    // Use cache if available and not forcing refresh
+    if (postsCache && !force) {
+      renderPostsFromCache();
+      return;
+    }
+
+    // Show skeleton if it's the first load or forced
+    const skeleton = postsDiv.querySelector('.skeleton-loader');
+    if (!skeleton) {
+      postsDiv.innerHTML = `
+        <div class="skeleton-loader space-y-6">
+          <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm animate-pulse">
+            <div class="flex items-center gap-3 mb-4"><div class="w-10 h-10 bg-slate-100 rounded-xl"></div><div class="space-y-2"><div class="h-3 bg-slate-100 rounded w-24"></div><div class="h-2 bg-slate-100 rounded w-16"></div></div></div>
+            <div class="h-4 bg-slate-50 rounded w-full mb-2"></div><div class="h-4 bg-slate-50 rounded w-3/4"></div>
+          </div>
+        </div>`;
+    }
+
+    try {
+      const res = await fetch('/api/posts');
+      if (!res.ok) throw new Error('Failed to fetch posts');
+      const data = await res.json();
+      postsCache = data;
+      renderPostsFromCache();
+    } catch (err) {
+      console.error(err);
+      postsDiv.innerHTML = '<div class="text-center p-8 text-slate-400 font-medium">Failed to load feed. Please try again.</div>';
+    }
+  }
+
+  function renderPostsFromCache() {
+    if (!postsCache || !postsDiv) return;
     postsDiv.innerHTML = '';
-    data.forEach(p => postsDiv.appendChild(renderPost(p)));
+    if (postsCache.length === 0) {
+      postsDiv.innerHTML = '<div class="text-center p-12 text-slate-400 font-medium italic">No posts yet. Be the first to share!</div>';
+      return;
+    }
+    postsCache.forEach(p => postsDiv.appendChild(renderPost(p)));
+  }
+
+  if (refreshFeedBtn) {
+    refreshFeedBtn.addEventListener('click', () => {
+      refreshFeedBtn.classList.add('animate-spin');
+      refreshPosts(true).finally(() => {
+        setTimeout(() => refreshFeedBtn.classList.remove('animate-spin'), 500);
+      });
+    });
   }
 
   function renderPost(p) {
@@ -245,9 +293,18 @@ document.addEventListener('DOMContentLoaded', () => {
   if (postBtn) {
     postBtn.addEventListener('click', async () => {
       const content = postContent.value.trim(); if (!content) return;
+      postBtn.disabled = true;
+      postBtn.textContent = 'Sharing...';
+      
       const res = await fetch('/api/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
-      if (res.ok) { postContent.value = ''; refreshPosts(); }
+      if (res.ok) { 
+        postContent.value = ''; 
+        await refreshPosts(true); 
+      }
       else { alert('Post failed'); }
+      
+      postBtn.disabled = false;
+      postBtn.textContent = 'Share Post';
     });
   }
 
