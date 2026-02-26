@@ -59,8 +59,21 @@
     <div class="bg-white p-6 rounded-2xl border border-black/5 shadow-sm">
       <h3 class="text-lg font-bold mb-4">Academic Entry</h3>
       <div class="space-y-3">
-        <input id="subject" placeholder="Course Title"
+        <input id="subject" placeholder="Course Title (e.g. IT 111)"
           class="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+        <div class="flex gap-2">
+          <select id="year" class="w-1/2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            <option value="1">1st Year</option>
+            <option value="2">2nd Year</option>
+            <option value="3">3rd Year</option>
+            <option value="4">4th Year</option>
+          </select>
+          <select id="semester" class="w-1/2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            <option value="1">1st Sem</option>
+            <option value="2">2nd Sem</option>
+            <option value="3">Summer</option>
+          </select>
+        </div>
         <div class="flex gap-2">
           <input id="units" type="number" step="0.5" placeholder="Units" value="3"
             class="w-1/2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
@@ -96,7 +109,7 @@
             class="flex justify-between items-center bg-gray-50/50 p-3 rounded-xl border border-black/5">
             <div>
               <div class="font-bold text-sm">{{ g.subject }}</div>
-              <div class="text-xs text-gray-400">{{ g.units }} units</div>
+              <div class="text-[10px] text-gray-400 uppercase font-medium">Y{{ g.year }} S{{ g.semester }} • {{ g.units }} units</div>
             </div>
             <div class="flex items-center gap-3">
               <span class="font-bold text-blue-600">{{ g.grade }}</span>
@@ -112,6 +125,19 @@
         </div>
 
         <!-- System Feedback Message -->
+        <div id="honorsPanel" class="mt-4 p-4 rounded-2xl border {% if honors.eligible %}bg-blue-50 border-blue-100 text-blue-700{% else %}bg-gray-50 border-gray-100 text-gray-500{% endif %}">
+          <div class="flex items-center gap-3">
+            <span class="text-2xl">🎓</span>
+            <div>
+              <h5 class="font-bold text-xs uppercase tracking-widest">Latin Honors Status</h5>
+              <p class="text-sm font-black">{{ honors.title if honors.title else 'Not Eligible' }}</p>
+              {% if not honors.eligible %}
+              <p class="text-[10px] opacity-70">{{ honors.reason }}</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
         <div id="gwaFeedback"
           class="hidden p-5 rounded-2xl border transition-all duration-500 animate-in fade-in slide-in-from-top-2">
           <div class="flex items-start gap-4">

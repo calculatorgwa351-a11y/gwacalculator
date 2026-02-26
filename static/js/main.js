@@ -237,9 +237,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (addGrade) {
     addGrade.addEventListener('click', async () => {
-      const subject = subjectInp.value.trim(); const units = unitsInp.value; const grade = gradeInp.value;
+      const subject = subjectInp.value.trim();
+      const units = unitsInp.value;
+      const grade = gradeInp.value;
+      const year = document.getElementById('year').value;
+      const semester = document.getElementById('semester').value;
+
       if (!subject || !grade) return alert('Enter subject and grade');
-      const res = await fetch('/api/grades', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject, units, grade }) });
+      const res = await fetch('/api/grades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject, units, grade, year, semester })
+      });
+
       if (res.ok) {
         const json = await res.json();
         if (gradeList) {
@@ -249,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
           li.innerHTML = `
               <div>
                 <div class="font-bold text-sm">${escapeHtml(json.subject)}</div>
-                <div class="text-xs text-gray-400">${json.units} units</div>
+                <div class="text-[10px] text-gray-400 uppercase font-medium">Y${json.year} S${json.semester} • ${json.units} units</div>
               </div>
               <div class="flex items-center gap-3">
                 <span class="font-bold text-blue-600">${json.grade}</span>
@@ -263,6 +273,9 @@ document.addEventListener('DOMContentLoaded', () => {
           updateGwaFeedback(json.gwa);
           initGwaChart();
         }
+        // Refresh honors status (reload or fetch)
+        location.reload(); 
+
         if (subjectInp) subjectInp.value = '';
         if (gradeInp) gradeInp.value = '';
       } else { alert('Could not add grade'); }

@@ -92,6 +92,8 @@ class SubjectGrade(db.Model):
     subject = db.Column(db.String(128))
     units = db.Column(db.Float, default=3.0)
     grade = db.Column(db.Float)
+    year = db.Column(db.Integer, default=1)  # 1st, 2nd, 3rd, 4th
+    semester = db.Column(db.Integer, default=1)  # 1st, 2nd, Summer
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
     def is_failed(self):
@@ -142,6 +144,69 @@ def compute_gwa_for_user(user_id):
         return None
     total = sum(g.units * g.grade for g in grades)
     return round(total / total_units, 3)
+
+def analyze_latin_honors(user_id):
+    """
+    Analyzes Latin Honors eligibility based on CTU standards:
+    - Summa: 1.00 - 1.20
+    - Magna: 1.21 - 1.45
+    - Cum Laude: 1.46 - 1.75
+    - Requirements: No failing grades (>3.0), no grade below 2.5
+    """
+    grades = SubjectGrade.query.filter_by(user_id=user_id).all()
+    if not grades:
+        return {"eligible": False, "reason": "No grades recorded", "title": None}
+
+    total_units = 0
+    total_weighted_grade = 0
+    has_failed = False
+    has_below_2_5 = False
+    lowest_grade = 5.0
+
+    for g in grades:
+        # Exclude NSTP/ROTC from GWA if mentioned in subject name (common practice)
+        subj_upper = g.subject.upper()
+        if "NSTP" in subj_upper or "ROTC" in subj_upper:
+            continue
+
+        total_units += g.units
+        total_weighted_grade += (g.units * g.grade)
+
+        if g.grade > 3.0:
+            has_failed = True
+        if g.grade > 2.5:
+            has_below_2_5 = True
+        
+        if g.grade > lowest_grade: # In PH, 5.0 is worse than 1.0
+             pass # Logic check: we want to track the 'worst' grade value
+        
+        # Track the numerical worst grade (highest number)
+        if lowest_grade == 5.0 or g.grade > lowest_grade:
+             lowest_grade = g.grade
+
+    if total_units == 0:
+        return {"eligible": False, "reason": "No valid academic units", "title": None}
+
+    gwa = round(total_weighted_grade / total_units, 3)
+
+    if has_failed:
+        return {"eligible": False, "reason": "Has failing grades", "title": None, "gwa": gwa}
+    
+    if has_below_2_5:
+        return {"eligible": False, "reason": "Has grades below 2.50", "title": None, "gwa": gwa}
+
+    title = None
+    if 1.00 <= gwa <= 1.20:
+        title = "Summa Cum Laude"
+    elif 1.21 <= gwa <= 1.45:
+        title = "Magna Cum Laude"
+    elif 1.46 <= gwa <= 1.75:
+        title = "Cum Laude"
+
+    if title:
+        return {"eligible": True, "reason": "Meets all criteria", "title": title, "gwa": gwa}
+    else:
+        return {"eligible": False, "reason": "GWA does not meet honors cutoff", "title": None, "gwa": gwa}
 
 # --- Error Handlers ---
 @app.errorhandler(429)
@@ -215,7 +280,8 @@ def dashboard():
     posts = Post.query.order_by(Post.timestamp.desc()).limit(50).all()
     grades = SubjectGrade.query.filter_by(user_id=user.id).all()
     gwa = compute_gwa_for_user(user.id)
-    return render_template('dashboard.html', user=user, departments=departments, posts=posts, grades=grades, gwa=gwa)
+    honors = analyze_latin_honors(user.id)
+    return render_template('dashboard.html', user=user, departments=departments, posts=posts, grades=grades, gwa=gwa, honors=honors)
 
 # API: posts
 @app.route('/api/posts', methods=['GET','POST'])
@@ -306,14 +372,16 @@ def api_grades():
     user_id = session['user_id']
     if request.method == 'GET':
         grades = SubjectGrade.query.filter_by(user_id=user_id).all()
-        return jsonify([{'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'failed': g.is_failed()} for g in grades])
+        return jsonify([{'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'year': g.year, 'semester': g.semester, 'failed': g.is_failed()} for g in grades])
     payload = request.get_json()
     subject = payload.get('subject','').strip()
     try:
         units = float(payload.get('units',3.0))
         grade = float(payload.get('grade'))
+        year = int(payload.get('year', 1))
+        semester = int(payload.get('semester', 1))
     except (TypeError, ValueError):
-        return jsonify({'error':'Units and grade must be numeric'}), 400
+        return jsonify({'error':'Units, grade, year, and semester must be numeric'}), 400
     # validate
     if not subject:
         return jsonify({'error':'Subject required'}), 400
@@ -321,13 +389,13 @@ def api_grades():
         return jsonify({'error':'Grade must be between 1.0 (highest) and 5.0 (lowest)'}), 400
     if units <= 0:
         return jsonify({'error':'Units must be positive'}), 400
-    g = SubjectGrade(user_id=user_id, subject=subject, units=units, grade=grade)
+    g = SubjectGrade(user_id=user_id, subject=subject, units=units, grade=grade, year=year, semester=semester)
     db.session.add(g)
     db.session.commit()
     gwa = compute_gwa_for_user(user_id)
     # compute failed subjects
     failed = SubjectGrade.query.filter(SubjectGrade.user_id==user_id, SubjectGrade.grade>3.0).count()
-    return jsonify({'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'failed': g.is_failed(), 'gwa': gwa, 'failed_count': failed})
+    return jsonify({'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'year': g.year, 'semester': g.semester, 'failed': g.is_failed(), 'gwa': gwa, 'failed_count': failed})
 
 # edit existing grade
 @app.route('/api/grades/<int:grade_id>', methods=['PUT'])
@@ -352,6 +420,8 @@ def api_update_grade(grade_id):
     g.subject = subject
     g.units = units
     g.grade = grade_val
+    g.year = int(payload.get('year', g.year))
+    g.semester = int(payload.get('semester', g.semester))
     g.timestamp = datetime.utcnow()
     db.session.commit()
     gwa = compute_gwa_for_user(u_id)
