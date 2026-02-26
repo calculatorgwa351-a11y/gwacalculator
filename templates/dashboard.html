@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Dashboard - GWAcalculator{% endblock %}
 {% block content %}
+<script>window.userId = {{ user.id }};</script>
 <div class="flex flex-col lg:flex-row gap-8">
   <!-- Sidebar -->
   <aside class="w-full lg:w-64 lg:shrink-0 space-y-6">
@@ -27,6 +28,13 @@
 
   <!-- Feed section -->
   <section class="flex-1 space-y-6">
+    <div class="bg-white p-6 rounded-2xl border border-black/5 shadow-sm">
+      <h3 class="text-lg font-bold mb-4">GWA Trend</h3>
+      <div class="h-48 w-full">
+        <canvas id="gwaChart"></canvas>
+      </div>
+    </div>
+
     <div class="bg-white p-6 rounded-2xl border border-black/5 shadow-sm space-y-4">
       <textarea id="postContent" placeholder="What's on your mind, {{ user.name }}?" rows="3"
         class="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all"></textarea>
@@ -77,8 +85,11 @@
         </svg>
       </button>
 
-      <div id="gradesContent" class="transition-all duration-300 overflow-hidden">
-        <ul id="gradeList" class="space-y-3 mb-6">
+        <div id="gradesContent" class="transition-all duration-300 overflow-hidden">
+          <div class="flex gap-2 mb-4">
+            <button id="exportCsv" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition-all">Export CSV</button>
+          </div>
+          <ul id="gradeList" class="space-y-3 mb-6">
           <!-- Grades populated by JS -->
           {% for g in grades %}
           <li data-id="{{ g.id }}"

@@ -59,14 +59,62 @@ document.addEventListener('DOMContentLoaded', () => {
     gwaQuote.innerHTML = config.quotes.join('<br>');
   }
 
+  // GWA Chart Logic
+  let gwaChart;
+  async function initGwaChart() {
+    const canvas = document.getElementById('gwaChart');
+    if (!canvas) return;
+
+    const res = await fetch(`/api/analytics/user-timeline?user_id=${window.userId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const ctx = canvas.getContext('2d');
+    const labels = data.timeline.map(item => new Date(item.timestamp).toLocaleDateString());
+    const values = data.timeline.map(item => item.gwa);
+
+    if (gwaChart) gwaChart.destroy();
+
+    gwaChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'GWA over time',
+          data: values,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.1)',
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: false,
+            reverse: true, // Philippine GWA: 1.0 is best, 5.0 is failing
+            suggestedMin: 1.0,
+            suggestedMax: 5.0
+          }
+        },
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    });
+  }
+
   // Initial GWA Call
   const gwaEl = document.getElementById('gwa');
   if (gwaEl) {
-    const initialGwa = gwaEl.textContent;
-    if (initialGwa && initialGwa !== '—') updateGwaFeedback(initialGwa);
-  }
+      const initialGwa = gwaEl.textContent;
+      if (initialGwa && initialGwa !== '—') updateGwaFeedback(initialGwa);
+    }
+    initGwaChart();
 
-  // Post elements
+    // Post elements
   const postBtn = document.getElementById('postBtn');
   const postContent = document.getElementById('postContent');
   const postsDiv = document.getElementById('posts');
@@ -207,23 +255,84 @@ document.addEventListener('DOMContentLoaded', () => {
           gradeList.appendChild(li);
         }
         if (gwaSpan) gwaSpan.textContent = json.gwa || '—';
-        if (json.gwa) updateGwaFeedback(json.gwa);
+        if (json.gwa) {
+          updateGwaFeedback(json.gwa);
+          initGwaChart();
+        }
         if (subjectInp) subjectInp.value = '';
         if (gradeInp) gradeInp.value = '';
       } else { alert('Could not add grade'); }
     });
   }
 
-  // Admin Modal Logic
-  const adminBtn = document.getElementById('adminBtn');
-  const adminModal = document.getElementById('adminModal');
-  const adminCancel = document.getElementById('adminCancel');
-  const adminSubmit = document.getElementById('adminSubmit');
-  const adminError = document.getElementById('adminError');
-  const adminBackdrop = document.getElementById('adminBackdrop');
+  // Theme Toggle Logic
+  const themeToggle = document.getElementById('themeToggle');
+  const body = document.body;
+
+  // Load saved theme
+  if (localStorage.getItem('high-contrast') === 'true') {
+    body.classList.add('high-contrast');
+  }
+
+  if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+      const isHighContrast = body.classList.toggle('high-contrast');
+      localStorage.setItem('high-contrast', isHighContrast);
+      
+      // Accessibility announcement
+      const announcement = isHighContrast ? 'High contrast mode enabled' : 'High contrast mode disabled';
+      const liveRegion = document.getElementById('a11y-announcer') || createAnnouncer();
+      liveRegion.textContent = announcement;
+    });
+  }
+
+  function createAnnouncer() {
+    const announcer = document.createElement('div');
+    announcer.id = 'a11y-announcer';
+    announcer.setAttribute('aria-live', 'polite');
+    announcer.className = 'sr-only';
+    document.body.appendChild(announcer);
+    return announcer;
+  }
+
+  // Export CSV Logic
+  const exportCsvBtn = document.getElementById('exportCsv');
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', () => {
+      const grades = [];
+      const items = document.querySelectorAll('#gradeList li');
+      items.forEach(li => {
+        const subject = li.querySelector('.font-bold.text-sm').textContent;
+        const units = li.querySelector('.text-xs.text-gray-400').textContent.replace(' units', '');
+        const grade = li.querySelector('.font-bold.text-blue-600').textContent;
+        grades.push({ subject, units, grade });
+      });
+
+      if (grades.length === 0) return alert('No grades to export');
+
+      let csv = 'Subject,Units,Grade\n';
+      grades.forEach(g => {
+        csv += `"${g.subject.replace(/"/g, '""')}",${g.units},${g.grade}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `gwa_report_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  }
+
+  // Focus Management for Admin Modal
+  let lastFocusedElement;
 
   if (adminBtn && adminModal && adminError) {
     adminBtn.onclick = () => {
+      lastFocusedElement = document.activeElement;
       adminModal.classList.remove('hidden');
       adminError.classList.add('hidden');
       const sidInp = document.getElementById('admin_school_id');
@@ -231,7 +340,13 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  const hideAdminModal = () => { if (adminModal) adminModal.classList.add('hidden'); };
+  const hideAdminModal = () => { 
+    if (adminModal) {
+      adminModal.classList.add('hidden');
+      if (lastFocusedElement) lastFocusedElement.focus();
+    }
+  };
+
   if (adminCancel) adminCancel.onclick = hideAdminModal;
   if (adminBackdrop) adminBackdrop.onclick = hideAdminModal;
 
@@ -256,6 +371,32 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
   }
+
+  // Close modal on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !adminModal.classList.contains('hidden')) {
+      hideAdminModal();
+    }
+    
+    // Trap focus in modal
+    if (e.key === 'Tab' && !adminModal.classList.contains('hidden')) {
+      const focusableElements = adminModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
+      }
+    }
+  });
 
   function escapeHtml(s) { return (s + '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": "&#39;" }[c])); }
 
