@@ -45,6 +45,10 @@ python app.py
 ```
 Open [http://127.0.0.1:5000/](http://127.0.0.1:5000/) in your browser.
 
+**Default Admin Credentials:**
+- **School ID:** `admin`
+- **Password:** `adminpass`
+
 ## 🌐 Deployment
 This project is ready for **Render**.
 1. Push to GitHub: `https://github.com/calculatorgwa351-a11y/gwacalculator`
