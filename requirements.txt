@@ -7,3 +7,4 @@ python-dotenv==1.0.1
 pg8000==1.30.5
 certifi==2024.8.30
 gunicorn==21.2.0
+Flask-CORS==4.0.0

@@ -5,13 +5,25 @@ from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
+from urllib.parse import urlparse, urljoin
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# CORS setup
+CORS(app, origins=app.config.get('CORS_ALLOWED_ORIGINS', '*'))
+
 db = SQLAlchemy(app)
+
+# --- Utils ---
+def is_safe_url(target):
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and \
+           ref_url.netloc == test_url.netloc
 
 # --- Models ---
 class User(db.Model):
@@ -90,7 +102,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            return redirect(url_for('login'))
+            return redirect(url_for('login', next=request.url))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -101,10 +113,10 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            return redirect(url_for('login'))
+            return redirect(url_for('login', next=request.url))
         user = db.session.get(User, session['user_id'])
         if not user:
-            return redirect(url_for('login'))
+            return redirect(url_for('login', next=request.url))
         is_admin = Admin.query.filter_by(user_id=user.id).first()
         if not is_admin:
             return redirect(url_for('dashboard'))
@@ -123,12 +135,15 @@ def compute_gwa_for_user(user_id):
 # --- Routes ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
+    next_url = request.args.get('next')
     if request.method == 'POST':
         school_id = request.form['school_id']
         password = request.form['password']
         user = User.query.filter_by(school_id=school_id).first()
         if user and user.check_password(password):
             session['user_id'] = user.id
+            if next_url and is_safe_url(next_url):
+                return redirect(next_url)
             return redirect(url_for('dashboard'))
         return render_template('login.html', error='Invalid credentials')
     return render_template('login.html')

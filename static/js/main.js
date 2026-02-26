@@ -193,10 +193,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const id = article.dataset.id; const box = article.querySelector('.commentBox'); const content = (box ? box.value : '').trim();
         if (!content) return;
         const res = await fetch(`/api/posts/${id}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
-        const json = await res.json();
-        const list = article.querySelector('.commentList');
-        if (list) list.insertAdjacentHTML('beforeend', `<div class="bg-gray-50 p-3 rounded-xl text-sm animate-in slide-in-from-bottom-2 duration-300"><strong class="text-blue-600">${escapeHtml(json.user)}</strong>: <span class="text-gray-600">${escapeHtml(json.content)}</span></div>`);
-        if (box) box.value = '';
+        if (res.ok) {
+      const json = await res.json();
+      const list = article.querySelector('.commentList');
+      if (list) list.insertAdjacentHTML('beforeend', `<div class="bg-gray-50 p-3 rounded-xl text-sm animate-in slide-in-from-bottom-2 duration-300"><strong class="text-blue-600">${escapeHtml(json.user)}</strong>: <span class="text-gray-600">${escapeHtml(json.content)}</span></div>`);
+      if (box) box.value = '';
+    } else {
+      console.error('Comment failed');
+    }
       });
     }
 
