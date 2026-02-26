@@ -6,12 +6,23 @@ from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
 from urllib.parse import urlparse, urljoin
+import logging
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Rate Limiter setup
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
 
 # CORS setup
 CORS(app, origins=app.config.get('CORS_ALLOWED_ORIGINS', '*'))
@@ -132,8 +143,29 @@ def compute_gwa_for_user(user_id):
     total = sum(g.units * g.grade for g in grades)
     return round(total / total_units, 3)
 
+# --- Error Handlers ---
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify(error="Too many requests. Please try again later."), 429
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('login.html', error="Page not found"), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    logging.error(f"Server Error: {error}")
+    return render_template('login.html', error="An internal server error occurred. Our team has been notified."), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logging.error(f"Unhandled Exception: {e}")
+    return jsonify(error="An unexpected error occurred."), 500
+
 # --- Routes ---
 @app.route('/', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def login():
     next_url = request.args.get('next')
     if request.method == 'POST':
@@ -141,6 +173,7 @@ def login():
         password = request.form['password']
         user = User.query.filter_by(school_id=school_id).first()
         if user and user.check_password(password):
+            session.permanent = True
             session['user_id'] = user.id
             if next_url and is_safe_url(next_url):
                 return redirect(next_url)
@@ -149,6 +182,7 @@ def login():
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("3 per hour")
 def register():
     if request.method == 'POST':
         school_id = request.form['school_id']
@@ -162,6 +196,7 @@ def register():
         u.set_password(password)
         db.session.add(u)
         db.session.commit()
+        session.permanent = True
         session['user_id'] = u.id
         return redirect(url_for('dashboard'))
     departments = Department.query.all()
@@ -398,6 +433,7 @@ def admin_panel():
     return render_template('admin.html')
 
 @app.route('/admin-auth', methods=['POST'])
+@limiter.limit("5 per minute")
 def admin_auth():
     data = request.get_json() or {}
     school_id = data.get('school_id')
