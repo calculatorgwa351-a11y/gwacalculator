@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="calculator-window">
+    <div class="window-header">
+        <div class="window-controls">
+            <span class="control-button close"></span>
+            <span class="control-button minimize"></span>
+            <span class="control-button maximize"></span>
+        </div>
+        <span class="window-title">GWA Calculator</span>
+    </div>
+    <div class="window-content">
+        <h1>Grade Weighted Average Calculator</h1>
+        <div id="grades-input">
+            <!-- Grade input fields will be added here by JavaScript -->
+        </div>
+        <button id="add-course" class="button primary">Add Course</button>
+        <button id="calculate-gwa" class="button primary">Calculate GWA</button>
+        <div id="result">
+            <!-- Result will be displayed here -->
+        </div>
+    </div>
+</div>
+{% endblock %}

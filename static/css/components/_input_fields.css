@@ -1,0 +1,15 @@
+/* Input Field Styles */
+.input-field {
+    padding: 8px 12px;
+    border: 1px solid var(--mac-border-color);
+    border-radius: 5px;
+    font-size: 14px;
+    transition: all 0.2s ease-in-out;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.input-field:focus {
+    outline: none;
+    border-color: var(--mac-blue);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.25);
+}

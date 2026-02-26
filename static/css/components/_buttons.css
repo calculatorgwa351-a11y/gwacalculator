@@ -1,0 +1,45 @@
+/* Button Styles */
+.button {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 5px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    border: 1px solid transparent;
+}
+
+.button.primary {
+    background-color: var(--mac-blue);
+    color: #ffffff;
+    border-color: #0066CC;
+    box-shadow: var(--mac-light-shadow);
+}
+
+.button.primary:hover {
+    background-color: #0066CC;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.button.primary:active {
+    background-color: #0056B3;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.button.secondary {
+    background-color: var(--mac-light-gray);
+    color: var(--mac-text-color);
+    border-color: var(--mac-dark-gray);
+    box-shadow: var(--mac-light-shadow);
+}
+
+.button.secondary:hover {
+    background-color: var(--mac-dark-gray);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.button.secondary:active {
+    background-color: #A0A0A0;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}

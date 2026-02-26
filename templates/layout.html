@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GWA Calculator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/_buttons.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/_input_fields.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/_sidebar.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/_dock.css') }}">
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <nav>
+                <ul>
+                    <li><a href="#" class="sidebar-item active">Home</a></li>
+                    <li><a href="#" class="sidebar-item">Settings</a></li>
+                    <li><a href="#" class="sidebar-item">About</a></li>
+                </ul>
+            </nav>
+        </aside>
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <div class="dock">
+        <div class="dock-item"></div>
+        <div class="dock-item"></div>
+        <div class="dock-item"></div>
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

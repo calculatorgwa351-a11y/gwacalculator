@@ -1,0 +1,35 @@
+/* Sidebar Styles */
+.sidebar {
+    width: 200px;
+    background-color: rgba(240, 240, 240, 0.8);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid var(--mac-light-gray);
+    padding: 20px 0;
+    box-shadow: var(--mac-shadow);
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar nav ul li a {
+    display: block;
+    padding: 10px 20px;
+    color: var(--mac-text-color);
+    text-decoration: none;
+    font-weight: 500;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.sidebar nav ul li a:hover {
+    background-color: var(--mac-light-gray);
+}
+
+.sidebar nav ul li a.active {
+    background-color: var(--mac-blue);
+    color: #ffffff;
+}

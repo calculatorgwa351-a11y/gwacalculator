@@ -1,0 +1,9 @@
+Flask==3.0.0
+Flask-SQLAlchemy==3.0.3
+Werkzeug==3.0.0
+
+# Use these versions or newer. If you prefer PostgreSQL replace SQLite URI in config.
+python-dotenv==1.0.1
+pg8000==1.30.5
+certifi==2024.8.30
+gunicorn==21.2.0

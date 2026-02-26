@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: gwacalculator
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers ${WEB_CONCURRENCY:-2} --threads ${WEB_THREADS:-2} --bind 0.0.0.0:${PORT}
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.5
+      - key: SECRET_KEY
+        generateValue: true
+      # One of the following:
+      # - key: DATABASE_URL
+      #   sync: false
+      # Or individual PG* vars for our Config to compose a URL:
+      # - key: PGUSER
+      #   sync: false
+      # - key: PGPASSWORD
+      #   sync: false
+      # - key: PGHOST
+      #   sync: false
+      # - key: PGPORT
+      #   sync: false
+      # - key: PGDATABASE
+      #   sync: false
