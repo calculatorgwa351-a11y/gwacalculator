@@ -13,8 +13,51 @@ document.addEventListener('DOMContentLoaded', () => {
     handbook: 'Student Handbook'
   };
 
+  // Mobile Menu Logic
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  const closeSidebar = document.getElementById('closeSidebar');
+  const sidebar = document.getElementById('sidebar');
+  const mobileOverlay = document.getElementById('mobileSidebarOverlay');
+
+  function toggleSidebar(show) {
+    if (show) {
+      sidebar.classList.remove('hidden', '-translate-x-full');
+      sidebar.classList.add('flex', 'translate-x-0');
+      mobileOverlay.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    } else {
+      sidebar.classList.add('-translate-x-full');
+      sidebar.classList.remove('translate-x-0');
+      mobileOverlay.classList.add('hidden');
+      document.body.style.overflow = '';
+      // On small screens, hide after transition
+      setTimeout(() => {
+        if (window.innerWidth < 768) {
+          sidebar.classList.add('hidden');
+        }
+      }, 300);
+    }
+  }
+
+  if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => toggleSidebar(true));
+  }
+
+  if (closeSidebar) {
+    closeSidebar.addEventListener('click', () => toggleSidebar(false));
+  }
+
+  if (mobileOverlay) {
+    mobileOverlay.addEventListener('click', () => toggleSidebar(false));
+  }
+
+  // Close sidebar when clicking a link on mobile
   sidebarLinks.forEach(link => {
     link.addEventListener('click', () => {
+      if (window.innerWidth < 768) {
+        toggleSidebar(false);
+      }
+      
       const viewId = link.dataset.view;
       
       // Update UI

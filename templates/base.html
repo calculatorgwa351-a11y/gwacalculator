@@ -120,14 +120,23 @@
 <body class="min-h-screen text-slate-900 overflow-x-hidden">
   <div class="flex min-h-screen">
     {% if session.get('user_id') %}
+    <!-- Mobile Sidebar Overlay -->
+    <div id="mobileSidebarOverlay" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] hidden md:hidden"></div>
+
     <!-- SIS Sidebar -->
-    <aside class="w-64 glass border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-screen z-50">
+    <aside id="sidebar" class="w-64 glass border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-screen z-50 transition-transform duration-300 -translate-x-full md:translate-x-0 fixed md:sticky inset-y-0 left-0 bg-white">
       <div class="p-6">
-        <div class="flex items-center gap-3 mb-8">
-          <div class="w-10 h-10 bg-gradient-to-tr from-blue-600 to-blue-800 rounded-xl flex items-center justify-center text-white shadow-lg">
-            <span class="font-black text-xl italic">G</span>
+        <div class="flex items-center justify-between mb-8">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-gradient-to-tr from-blue-600 to-blue-800 rounded-xl flex items-center justify-center text-white shadow-lg">
+              <span class="font-black text-xl italic">G</span>
+            </div>
+            <span class="font-black text-xl tracking-tight text-slate-800">GWA<span class="text-blue-600">calculator</span></span>
           </div>
-          <span class="font-black text-xl tracking-tight text-slate-800">GWA<span class="text-blue-600">calculator</span></span>
+          <!-- Mobile Close Button -->
+          <button id="closeSidebar" class="md:hidden p-2 text-slate-400 hover:text-slate-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
         </div>
 
         <nav class="space-y-1" aria-label="Sidebar Navigation">
@@ -167,12 +176,12 @@
     <main class="flex-1 flex flex-col min-w-0">
       {% if session.get('user_id') %}
       <!-- Top Bar -->
-      <header class="glass sticky top-0 z-40 border-b border-slate-200 px-8 py-4 flex justify-between items-center">
+      <header class="glass sticky top-0 z-40 border-b border-slate-200 px-4 md:px-8 py-4 flex justify-between items-center">
         <div class="flex items-center gap-4">
-          <button class="md:hidden p-2 -ml-2 text-slate-600" aria-label="Open Menu">
+          <button id="mobileMenuBtn" class="md:hidden p-2 -ml-2 text-slate-600" aria-label="Open Menu">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
           </button>
-          <h1 id="viewTitle" class="text-lg font-black text-slate-800 tracking-tight">Dashboard Overview</h1>
+          <h1 id="viewTitle" class="text-sm md:text-lg font-black text-slate-800 tracking-tight">Dashboard Overview</h1>
         </div>
 
         <div class="flex items-center gap-4">
@@ -192,7 +201,7 @@
       {% endif %}
 
       <!-- Content Area -->
-      <div class="p-8">
+      <div class="p-4 md:p-8">
         {% block content %}{% endblock %}
       </div>
     </main>
