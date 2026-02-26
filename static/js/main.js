@@ -405,6 +405,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Export CSV Logic
   const exportCsvBtn = document.getElementById('exportCsv');
+  
+  // Admin Elements
+  const adminBtn = document.getElementById('adminBtn');
+  const adminModal = document.getElementById('adminModal');
+  const adminError = document.getElementById('adminError');
+  const adminCancel = document.getElementById('adminCancel');
+  const adminBackdrop = document.getElementById('adminBackdrop');
+  const adminSubmit = document.getElementById('adminSubmit');
+
   if (exportCsvBtn) {
     exportCsvBtn.addEventListener('click', () => {
       const grades = [];
