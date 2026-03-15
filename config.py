@@ -42,9 +42,7 @@ class Config:
             ctx = ssl.create_default_context(cafile=certifi.where())
         SQLALCHEMY_ENGINE_OPTIONS = {
             "connect_args": {
-                "ssl_context": ctx,
-                "connect_timeout": 30,
-                "command_timeout": 30
+                "ssl_context": ctx
             },
             "pool_pre_ping": True,
             "pool_recycle": 300
