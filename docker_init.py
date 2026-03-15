@@ -94,6 +94,11 @@ def generate_dummy_data():
             # Generate 50 students
             departments = Department.query.all()
             
+            if not departments:
+                print("❌ No departments found. Cannot generate dummy data.")
+                return
+            
+            generated_count = 0
             for i in range(50):
                 first_name = random.choice(FIRST_NAMES)
                 last_name = random.choice(LAST_NAMES)
@@ -148,18 +153,21 @@ def generate_dummy_data():
                     db.session.add(subject_grade)
                 
                 db.session.commit()
+                generated_count += 1
                 
-                if (i + 1) % 10 == 0:
-                    print(f"📊 Generated {i + 1} students...")
+                if generated_count % 10 == 0:
+                    print(f"📊 Generated {generated_count} students...")
             
-            print("✅ Dummy data generation complete!")
-            print("📊 Generated 50+ students with realistic academic data")
+            print(f"✅ Dummy data generation complete! Generated {generated_count} students")
+            print("📊 Generated realistic academic data for analysis")
             
     except ImportError as e:
         print(f"⚠️ Faker not available: {e}")
         print("📊 Skipping dummy data generation (install faker for full functionality)")
     except Exception as e:
         print(f"❌ Error generating dummy data: {e}")
+        import traceback
+        traceback.print_exc()
 
 def start_application():
     """Start the Flask application"""
