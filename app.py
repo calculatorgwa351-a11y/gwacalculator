@@ -6,11 +6,10 @@ from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from config import Config
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'dev-secret-change-me'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config.from_object(Config)
 
 db = SQLAlchemy(app)
 
@@ -187,22 +186,35 @@ def internal_error(error):
     db.session.rollback()
     return render_template('login.html', error="An internal server error occurred."), 500
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print(f"Unhandled Exception: {e}")
+    try:
+        db.session.rollback()
+    except:
+        pass
+    return render_template('login.html', error="An unexpected error occurred."), 500
+
 # --- Routes ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
-    next_url = request.args.get('next')
-    if request.method == 'POST':
-        school_id = request.form['school_id']
-        password = request.form['password']
-        user = User.query.filter_by(school_id=school_id).first()
-        if user and user.check_password(password):
-            session.permanent = True
-            session['user_id'] = user.id
-            if next_url and is_safe_url(next_url):
-                return redirect(next_url)
-            return redirect(url_for('dashboard'))
-        return render_template('login.html', error='Invalid credentials')
-    return render_template('login.html')
+    try:
+        next_url = request.args.get('next')
+        if request.method == 'POST':
+            school_id = request.form['school_id']
+            password = request.form['password']
+            user = User.query.filter_by(school_id=school_id).first()
+            if user and user.check_password(password):
+                session.permanent = True
+                session['user_id'] = user.id
+                if next_url:
+                    return redirect(next_url)
+                return redirect(url_for('dashboard'))
+            return render_template('login.html', error='Invalid credentials')
+        return render_template('login.html')
+    except Exception as e:
+        print(f"Login error: {e}")
+        return render_template('login.html', error='Login service temporarily unavailable')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -348,16 +360,14 @@ def api_grades():
     user_id = session['user_id']
     if request.method == 'GET':
         grades = SubjectGrade.query.filter_by(user_id=user_id).all()
-        return jsonify([{'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'year': g.year, 'semester': g.semester, 'failed': g.is_failed()} for g in grades])
+        return jsonify([{'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'failed': g.is_failed()} for g in grades])
     payload = request.get_json()
     subject = payload.get('subject','').strip()
     try:
         units = float(payload.get('units',3.0))
         grade = float(payload.get('grade'))
-        year = int(payload.get('year', 1))
-        semester = int(payload.get('semester', 1))
     except (TypeError, ValueError):
-        return jsonify({'error':'Units, grade, year, and semester must be numeric'}), 400
+        return jsonify({'error':'Units and grade must be numeric'}), 400
     # validate
     if not subject:
         return jsonify({'error':'Subject required'}), 400
@@ -368,7 +378,7 @@ def api_grades():
     # Auto-post achievement if GWA improved significantly
     old_gwa = compute_gwa_for_user(user_id)
     
-    g = SubjectGrade(user_id=user_id, subject=subject, units=units, grade=grade, year=year, semester=semester)
+    g = SubjectGrade(user_id=user_id, subject=subject, units=units, grade=grade)
     db.session.add(g)
     db.session.commit()
     
@@ -384,7 +394,7 @@ def api_grades():
 
     # compute failed subjects
     failed = SubjectGrade.query.filter(SubjectGrade.user_id==user_id, SubjectGrade.grade>3.0).count()
-    return jsonify({'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'year': g.year, 'semester': g.semester, 'failed': g.is_failed(), 'gwa': gwa, 'failed_count': failed})
+    return jsonify({'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'failed': g.is_failed(), 'gwa': gwa, 'failed_count': failed})
 
 # edit existing grade
 @app.route('/api/grades/<int:grade_id>', methods=['PUT'])
@@ -409,8 +419,6 @@ def api_update_grade(grade_id):
     g.subject = subject
     g.units = units
     g.grade = grade_val
-    g.year = int(payload.get('year', g.year))
-    g.semester = int(payload.get('semester', g.semester))
     g.timestamp = datetime.utcnow()
     db.session.commit()
     gwa = compute_gwa_for_user(u_id)
