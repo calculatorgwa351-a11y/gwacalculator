@@ -130,9 +130,6 @@ def analyze_latin_honors(user_id):
     if not grades:
         return {"eligible": False, "reason": "No grades recorded", "title": None}
 
-    # Group by semester to check load (CTU regular load is typically 18+ units, or all prescribed)
-    # For simplicity, we'll check if any major semester has < 15 units
-    semester_loads = {}
     total_units = 0
     total_weighted_grade = 0
     has_failed = False
@@ -150,34 +147,22 @@ def analyze_latin_honors(user_id):
         total_units += g.units
         total_weighted_grade += (g.units * g.grade)
 
-        # Track semester loads (excluding summer for load check)
-        if g.semester != 3: # 3 is Summer
-            key = f"{g.year}-{g.semester}"
-            semester_loads[key] = semester_loads.get(key, 0) + g.units
-
         if g.grade > 3.0:
             has_failed = True
         if g.grade > 2.5:
             has_below_2_5 = True
 
-    # CTU Residency & Load Check: Must maintain full load
-    # Normal semester load is 15+ units. Irregular if any sem < 15 units.
-    underloaded = any(load < 15 for load in semester_loads.values()) if semester_loads else False
-
     if total_units == 0:
         return {"eligible": False, "reason": "No valid academic units", "title": None, "status": "Regular"}
 
     gwa = round(total_weighted_grade / total_units, 3)
-    status = "Irregular" if underloaded else "Regular"
+    status = "Regular"
 
     if has_failed:
         return {"eligible": False, "reason": "Has failing grades (>3.0)", "title": None, "gwa": gwa, "status": status}
     
     if has_below_2_5:
         return {"eligible": False, "reason": "Has grades below 2.50", "title": None, "gwa": gwa, "status": status}
-
-    if underloaded:
-         return {"eligible": False, "reason": "Underloaded in one or more semesters", "title": None, "gwa": gwa, "status": "Irregular"}
 
     title = None
     if 1.00 <= gwa <= 1.20:
