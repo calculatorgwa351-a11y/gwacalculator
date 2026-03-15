@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
+from sqlalchemy.orm import joinedload, subqueryload
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -244,26 +245,35 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Eager load relationships that are needed in the template
-    user = User.query.options(
-        subqueryload(User.grades)
-    ).get(session['user_id'])
-    
-    departments = Department.query.all()
-    
-    # Eager load author for posts in dashboard
-    posts = Post.query.options(
-        joinedload(Post.author)
-    ).order_by(Post.timestamp.desc()).limit(50).all()
-    
-    # We can use the pre-loaded user.grades here
-    grades = user.grades
-    
-    # Optimization: calculate GWA once
-    gwa = compute_gwa_for_user(user.id)
-    honors = analyze_latin_honors(user.id)
-    
-    return render_template('dashboard.html', user=user, departments=departments, posts=posts, grades=grades, gwa=gwa, honors=honors)
+    try:
+        # Get user with basic loading
+        user = User.query.get(session['user_id'])
+        if not user:
+            return redirect(url_for('login'))
+        
+        departments = Department.query.all()
+        
+        # Get posts with author loaded
+        posts = Post.query.options(
+            joinedload(Post.author)
+        ).order_by(Post.timestamp.desc()).limit(50).all()
+        
+        # Get user's grades
+        grades = SubjectGrade.query.filter_by(user_id=user.id).all()
+        
+        # Calculate GWA and honors
+        gwa = compute_gwa_for_user(user.id)
+        honors = analyze_latin_honors(user.id)
+        
+        return render_template('dashboard.html', user=user, departments=departments, posts=posts, grades=grades, gwa=gwa, honors=honors)
+    except Exception as e:
+        print(f"Dashboard error: {e}")
+        # Return a basic dashboard if there are errors
+        try:
+            user = User.query.get(session['user_id'])
+            return render_template('dashboard.html', user=user, departments=[], posts=[], grades=[], gwa=None, honors=None)
+        except:
+            return redirect(url_for('login'))
 
 # API: posts
 @app.route('/api/posts', methods=['GET','POST'])
