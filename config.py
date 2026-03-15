@@ -40,7 +40,15 @@ class Config:
             ctx.verify_mode = ssl.CERT_NONE
         else:
             ctx = ssl.create_default_context(cafile=certifi.where())
-        SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"ssl_context": ctx}}
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            "connect_args": {
+                "ssl_context": ctx,
+                "connect_timeout": 30,
+                "command_timeout": 30
+            },
+            "pool_pre_ping": True,
+            "pool_recycle": 300
+        }
 
     DEBUG = os.getenv("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
 

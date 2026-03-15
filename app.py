@@ -251,19 +251,29 @@ def dashboard():
         if not user:
             return redirect(url_for('login'))
         
-        departments = Department.query.all()
+        # Limit queries for performance with remote database
+        departments = Department.query.limit(10).all()
         
-        # Get posts with author loaded
+        # Get fewer posts for better performance
         posts = Post.query.options(
             joinedload(Post.author)
-        ).order_by(Post.timestamp.desc()).limit(50).all()
+        ).order_by(Post.timestamp.desc()).limit(10).all()
         
-        # Get user's grades
-        grades = SubjectGrade.query.filter_by(user_id=user.id).all()
+        # Get user's grades with limit
+        grades = SubjectGrade.query.filter_by(user_id=user.id).limit(20).all()
         
-        # Calculate GWA and honors
-        gwa = compute_gwa_for_user(user.id)
-        honors = analyze_latin_honors(user.id)
+        # Calculate GWA and honors with error handling
+        try:
+            gwa = compute_gwa_for_user(user.id)
+        except Exception as e:
+            print(f"GWA calculation error: {e}")
+            gwa = None
+            
+        try:
+            honors = analyze_latin_honors(user.id)
+        except Exception as e:
+            print(f"Honors analysis error: {e}")
+            honors = None
         
         return render_template('dashboard.html', user=user, departments=departments, posts=posts, grades=grades, gwa=gwa, honors=honors)
     except Exception as e:
