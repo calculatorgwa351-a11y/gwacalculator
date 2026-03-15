@@ -3,143 +3,34 @@ import json
 from datetime import datetime
 from functools import wraps
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
-from config import Config
-from urllib.parse import urlparse, urljoin
-import logging
 
 app = Flask(__name__)
-app.config.from_object(Config)
-
-# Rate Limiter setup
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://",
-)
-
-# CORS setup
-CORS(app, origins=app.config.get('CORS_ALLOWED_ORIGINS', '*'))
+app.config['SECRET_KEY'] = 'dev-secret-change-me'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
-
-# --- Utils ---
-@app.context_processor
-def inject_user():
-    if 'current_user' not in g:
-        g.current_user = None
-        if 'user_id' in session:
-            g.current_user = db.session.get(User, session['user_id'])
-    return dict(current_user=g.current_user)
-
-def is_safe_url(target):
-    ref_url = urlparse(request.host_url)
-    test_url = urlparse(urljoin(request.host_url, target))
-    return test_url.scheme in ('http', 'https') and \
-           ref_url.netloc == test_url.netloc
-
-from sqlalchemy.orm import joinedload, subqueryload
-
-# --- Models ---
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    school_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    name = db.Column(db.String(120), nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    department = db.Column(db.String(64), index=True)
-    course = db.Column(db.String(128))
-
-    posts = db.relationship('Post', backref='author', lazy=True, cascade="all, delete-orphan")
-    grades = db.relationship('SubjectGrade', backref='student', lazy=True, cascade="all, delete-orphan")
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-
-class Department(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True)
-    courses = db.relationship('Course', backref='department', lazy=True)
-
-class Course(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(128))
-    department_id = db.Column(db.Integer, db.ForeignKey('department.id'))
-
-class Post(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
-    content = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    reactions = db.relationship('Reaction', backref='post', lazy=True, cascade="all, delete-orphan")
-    comments = db.relationship('Comment', backref='post', lazy=True, cascade="all, delete-orphan")
-
-class Reaction(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    type = db.Column(db.String(32), default='like')  # like, love, wow, etc.
-
-class Comment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    author = db.relationship('User', backref='user_comments', lazy=True)
-    content = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-class SubjectGrade(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
-    subject = db.Column(db.String(128))
-    units = db.Column(db.Float, default=3.0)
-    grade = db.Column(db.Float)
-    year = db.Column(db.Integer, default=1)  # 1st, 2nd, 3rd, 4th
-    semester = db.Column(db.Integer, default=1)  # 1st, 2nd, Summer
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def is_failed(self):
-        return self.grade is not None and self.grade > 3.0
-
-# Simple Admin mapping table so we don't need to alter User schema in-place
-class Admin(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True)
-
-# expose model classes to Jinja templates for convenience
-app.jinja_env.globals['User'] = User
-app.jinja_env.globals['Department'] = Department
-app.jinja_env.globals['Course'] = Course
-app.jinja_env.globals['Admin'] = Admin
 
 # --- Auth helpers ---
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            return redirect(url_for('login', next=request.url))
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
-
-
-from sqlalchemy.exc import OperationalError
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            return redirect(url_for('login', next=request.url))
+            return redirect(url_for('login'))
         user = db.session.get(User, session['user_id'])
         if not user:
-            return redirect(url_for('login', next=request.url))
+            return redirect(url_for('login'))
         is_admin = Admin.query.filter_by(user_id=user.id).first()
         if not is_admin:
             return redirect(url_for('dashboard'))
@@ -230,10 +121,6 @@ def analyze_latin_honors(user_id):
         return {"eligible": False, "reason": "GWA does not meet honors cutoff", "title": None, "gwa": gwa, "status": status}
 
 # --- Error Handlers ---
-@app.errorhandler(429)
-def ratelimit_handler(e):
-    return jsonify(error="Too many requests. Please try again later."), 429
-
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('login.html', error="Page not found"), 404
@@ -241,17 +128,10 @@ def not_found_error(error):
 @app.errorhandler(500)
 def internal_error(error):
     db.session.rollback()
-    logging.error(f"Server Error: {error}")
-    return render_template('login.html', error="An internal server error occurred. Our team has been notified."), 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logging.error(f"Unhandled Exception: {e}")
-    return jsonify(error="An unexpected error occurred."), 500
+    return render_template('login.html', error="An internal server error occurred."), 500
 
 # --- Routes ---
 @app.route('/', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")
 def login():
     next_url = request.args.get('next')
     if request.method == 'POST':
@@ -268,7 +148,6 @@ def login():
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
-@limiter.limit("3 per hour")
 def register():
     if request.method == 'POST':
         school_id = request.form['school_id']
@@ -559,7 +438,6 @@ def admin_panel():
     return render_template('admin.html')
 
 @app.route('/admin-auth', methods=['POST'])
-@limiter.limit("5 per minute")
 def admin_auth():
     data = request.get_json() or {}
     school_id = data.get('school_id')
