@@ -14,6 +14,78 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# --- Models ---
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    school_id = db.Column(db.String(64), unique=True, nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    department = db.Column(db.String(64))
+    course = db.Column(db.String(128))
+
+    posts = db.relationship('Post', backref='author', lazy=True, cascade="all, delete-orphan")
+    grades = db.relationship('SubjectGrade', backref='student', lazy=True, cascade="all, delete-orphan")
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+class Department(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True)
+    courses = db.relationship('Course', backref='department', lazy=True)
+
+class Course(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128))
+    department_id = db.Column(db.Integer, db.ForeignKey('department.id'))
+
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    reactions = db.relationship('Reaction', backref='post', lazy=True, cascade="all, delete-orphan")
+    comments = db.relationship('Comment', backref='post', lazy=True, cascade="all, delete-orphan")
+
+class Reaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    type = db.Column(db.String(32), default='like')  # like, love, wow, etc.
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    author = db.relationship('User', backref='user_comments', lazy=True)
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SubjectGrade(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    subject = db.Column(db.String(128))
+    units = db.Column(db.Float, default=3.0)
+    grade = db.Column(db.Float)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def is_failed(self):
+        return self.grade is not None and self.grade > 3.0
+
+# Simple Admin mapping table so we don't need to alter User schema in-place
+class Admin(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True)
+
+# expose model classes to Jinja templates for convenience
+app.jinja_env.globals['User'] = User
+app.jinja_env.globals['Department'] = Department
+app.jinja_env.globals['Course'] = Course
+app.jinja_env.globals['Admin'] = Admin
+
 # --- Auth helpers ---
 def login_required(f):
     @wraps(f)
