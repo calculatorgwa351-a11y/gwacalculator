@@ -178,13 +178,9 @@ def main():
     print("🐳 GWA Calculator Docker Initialization")
     print("=" * 50)
     
-    # Check if database exists, if not initialize
-    if not os.path.exists('instance/app.db'):
-        init_database()
-        generate_dummy_data()
-    else:
-        print("🗄️ Database already exists, skipping initialization")
-        print("💡 To reinitialize, delete instance/app.db and restart container")
+    # Always initialize database and generate dummy data
+    init_database()
+    generate_dummy_data()
     
     # Start the application
     start_application()
