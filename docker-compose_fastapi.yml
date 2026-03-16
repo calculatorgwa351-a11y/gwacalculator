@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile_fastapi
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_DEBUG=false
+      - SECRET_KEY=your-secret-key-here
+      # Use SQLite for better performance
+      - DB_RESET_ON_INIT=false
+    volumes:
+      - ./instance:/app/instance
+    networks:
+      - gwa-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  gwa-network:
+    driver: bridge

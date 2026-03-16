@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: gwacalculator-fastapi
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r fastapi_requirements.txt
+    startCommand: python fastapi_init.py && uvicorn fastapi_main:app --host 0.0.0.0 --port $PORT --workers 2 --worker-class uvicorn.workers.UvicornWorker
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.5
+      - key: SECRET_KEY
+        generateValue: true
+      # Supabase PostgreSQL Configuration
+      - key: PGUSER
+        value: postgres.orzouvypfqrrerciryoy
+      - key: PGPASSWORD
+        value: VnrPNtYCDjiPDjB5
+      - key: PGHOST
+        value: aws-1-ap-southeast-2.pooler.supabase.com
+      - key: PGPORT
+        value: 6543
+      - key: PGDATABASE
+        value: postgres
+      - key: SUPABASE_SSL_NO_VERIFY
+        value: 1
