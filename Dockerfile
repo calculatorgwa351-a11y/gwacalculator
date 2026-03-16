@@ -30,5 +30,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:5000/ || exit 1
 
-# Run initialization and start the application
-CMD ["python", "docker_init.py"]
+# Run initialization and start the application with Gunicorn
+CMD ["sh", "-c", "python docker_init.py && gunicorn app:app --workers 4 --threads 2 --bind 0.0.0.0:5000 --timeout 120 --keep-alive 2 --max-requests 1000 --max-requests-jitter 100"]

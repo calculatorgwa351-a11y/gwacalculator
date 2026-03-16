@@ -1,12 +1,13 @@
 
 import json
-from datetime import datetime
-from functools import wraps
+from datetime import datetime, timedelta
+from functools import wraps, lru_cache
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
+import os
 from sqlalchemy.orm import joinedload, subqueryload
 
 app = Flask(__name__)
@@ -110,6 +111,7 @@ def admin_required(f):
     return decorated_function
 
 # --- Utility functions ---
+@lru_cache(maxsize=128)
 def compute_gwa_for_user(user_id):
     grades = SubjectGrade.query.filter_by(user_id=user_id).all()
     total_units = sum(g.units for g in grades if g.units is not None and g.grade is not None)
@@ -118,6 +120,7 @@ def compute_gwa_for_user(user_id):
     total = sum(g.units * g.grade for g in grades if g.units is not None and g.grade is not None)
     return round(total / total_units, 3)
 
+@lru_cache(maxsize=128)
 def analyze_latin_honors(user_id):
     """
     Analyzes Latin Honors eligibility based on CTU standards:
@@ -251,37 +254,45 @@ def dashboard():
         if not user:
             return redirect(url_for('login'))
         
-        # Limit queries for performance with remote database
-        departments = Department.query.limit(10).all()
+        # Use session for faster queries with minimal data
+        session_db = db.session
         
-        # Get fewer posts for better performance
-        posts = Post.query.options(
+        # Get departments with cache - very small query
+        departments = session_db.query(Department).all()
+        
+        # Get posts with eager loading but limited
+        posts = session_db.query(Post).options(
             joinedload(Post.author)
-        ).order_by(Post.timestamp.desc()).limit(10).all()
+        ).order_by(Post.timestamp.desc()).limit(5).all()
         
-        # Get user's grades with limit
-        grades = SubjectGrade.query.filter_by(user_id=user.id).limit(20).all()
+        # Get user's grades with optimized query
+        grades = session_db.query(SubjectGrade).filter(
+            SubjectGrade.user_id == user.id
+        ).limit(10).all()
         
-        # Calculate GWA and honors with error handling
-        try:
-            gwa = compute_gwa_for_user(user.id)
-        except Exception as e:
-            print(f"GWA calculation error: {e}")
-            gwa = None
-            
-        try:
-            honors = analyze_latin_honors(user.id)
-        except Exception as e:
-            print(f"Honors analysis error: {e}")
-            honors = None
+        # Calculate GWA and honors with caching
+        gwa = compute_gwa_for_user(user.id)
+        honors = analyze_latin_honors(user.id)
         
-        return render_template('dashboard.html', user=user, departments=departments, posts=posts, grades=grades, gwa=gwa, honors=honors)
+        return render_template('dashboard.html', 
+                             user=user, 
+                             departments=departments, 
+                             posts=posts, 
+                             grades=grades, 
+                             gwa=gwa, 
+                             honors=honors)
     except Exception as e:
         print(f"Dashboard error: {e}")
         # Return a basic dashboard if there are errors
         try:
             user = User.query.get(session['user_id'])
-            return render_template('dashboard.html', user=user, departments=[], posts=[], grades=[], gwa=None, honors=None)
+            return render_template('dashboard.html', 
+                                 user=user, 
+                                 departments=[], 
+                                 posts=[], 
+                                 grades=[], 
+                                 gwa=None, 
+                                 honors=None)
         except:
             return redirect(url_for('login'))
 
@@ -374,13 +385,13 @@ def api_comments(post_id):
     return jsonify({'id': c.id, 'user': User.query.get(c.user_id).name, 'content': c.content, 'timestamp': c.timestamp.isoformat()})
 
 # API: grades
-@app.route('/api/grades', methods=['GET','POST'])
+@app.route('/api/grades', methods=['GET', 'POST'])
 @login_required
 def api_grades():
     user_id = session['user_id']
     if request.method == 'GET':
-        grades = SubjectGrade.query.filter_by(user_id=user_id).all()
-        return jsonify([{'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'failed': g.is_failed()} for g in grades])
+        grades = SubjectGrade.query.filter_by(user_id=user_id).order_by(SubjectGrade.timestamp.desc()).all()
+        return jsonify([{'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'timestamp': g.timestamp.isoformat()} for g in grades])
     payload = request.get_json()
     subject = payload.get('subject','').strip()
     try:

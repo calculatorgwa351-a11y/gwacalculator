@@ -20,13 +20,12 @@ def init_database():
         # Create all tables
         db.create_all()
         
-        # Create departments and courses
+        # Create departments and courses (8 courses total)
         departments_data = [
-            {'name': 'COTE', 'courses': ['Computer Science', 'Computer Engineering', 'Information Technology']},
-            {'name': 'Business', 'courses': ['Business Administration', 'Accountancy', 'Marketing']},
-            {'name': 'Liberal Arts', 'courses': ['Psychology', 'Communication Arts', 'Political Science']},
-            {'name': 'Engineering', 'courses': ['Civil Engineering', 'Electrical Engineering', 'Mechanical Engineering']},
-            {'name': 'Science', 'courses': ['Biology', 'Chemistry', 'Physics']}
+            {'name': 'COTE', 'courses': ['Computer Science', 'Computer Engineering']},
+            {'name': 'Business', 'courses': ['Business Administration', 'Accountancy']},
+            {'name': 'Liberal Arts', 'courses': ['Psychology', 'Communication Arts']},
+            {'name': 'Engineering', 'courses': ['Civil Engineering', 'Electrical Engineering']}
         ]
         
         for dept_data in departments_data:
@@ -82,13 +81,17 @@ def generate_dummy_data():
         LAST_NAMES = ['Santos', 'Reyes', 'Cruz', 'Bautista', 'Aquino', 'Garcia', 'Fernandez', 'Ramos', 'Mendoza', 'Castillo',
                      'Torres', 'Navarro', 'Salazar', 'Del Rosario', 'Villanueva', 'Lopez', 'Morales', 'Rivera', 'Flores', 'Chavez']
         
-        SUBJECTS = {
-            'Computer Science': ['Data Structures and Algorithms', 'Computer Organization', 'Operating Systems', 'Database Systems'],
-            'Computer Engineering': ['Digital Logic Design', 'Microprocessors', 'Embedded Systems', 'Computer Architecture'],
-            'Information Technology': ['Systems Analysis and Design', 'IT Project Management', 'Business Process Management'],
-            'Business Administration': ['Principles of Management', 'Business Finance', 'Marketing Management'],
-            'Psychology': ['General Psychology', 'Developmental Psychology', 'Social Psychology']
-        }
+        # Social post templates
+        POST_TEMPLATES = [
+            "Just finished my {subject} exam! It was challenging but I think I did well. 📚",
+            "Anyone else struggling with {subject}? The concepts are really complex! 😅",
+            "Great day at CTU! Learned so much in {subject} class today. 👨‍🎓",
+            "Study group for {subject} at the library tomorrow! Who's joining? 📖",
+            "Finally understanding {subject}! The professor's teaching method really helps! 🎯",
+            "Midterm season is here! {subject} is keeping me busy but I'm staying positive! 💪",
+            "CTU life is amazing! Made great friends in {subject} class! 🎉",
+            "Just submitted my {subject} project. Hope I get a good grade! 🤞"
+        ]
         
         with app.app_context():
             # Generate 50 students
@@ -124,9 +127,17 @@ def generate_dummy_data():
                 db.session.commit()
                 
                 # Generate grades for this user
-                subjects = SUBJECTS.get(course, SUBJECTS['Computer Science'])
+                subjects = {
+                    'Computer Science': ['Data Structures and Algorithms', 'Computer Organization', 'Operating Systems', 'Database Systems'],
+                    'Computer Engineering': ['Digital Logic Design', 'Microprocessors', 'Embedded Systems', 'Computer Architecture'],
+                    'Information Technology': ['Systems Analysis and Design', 'IT Project Management', 'Business Process Management'],
+                    'Business Administration': ['Principles of Management', 'Business Finance', 'Marketing Management'],
+                    'Psychology': ['General Psychology', 'Developmental Psychology', 'Social Psychology']
+                }
+                
+                course_subjects = subjects.get(course, subjects['Computer Science'])
                 num_subjects = random.randint(8, 12)
-                selected_subjects = random.sample(subjects, min(num_subjects, len(subjects)))
+                selected_subjects = random.sample(course_subjects, min(num_subjects, len(course_subjects)))
                 
                 for subject in selected_subjects:
                     units = random.choice([1.0, 2.0, 3.0, 4.0, 5.0])
@@ -152,6 +163,25 @@ def generate_dummy_data():
                     )
                     db.session.add(subject_grade)
                 
+                # Generate social posts for this user (2-5 posts per user)
+                num_posts = random.randint(2, 5)
+                for j in range(num_posts):
+                    post_template = random.choice(POST_TEMPLATES)
+                    subject_mention = random.choice(selected_subjects) if selected_subjects else "my studies"
+                    content = post_template.format(subject=subject_mention)
+                    
+                    # Add timestamp variation for posts
+                    post_days_ago = random.randint(1, 180)
+                    post_timestamp = datetime.utcnow() - timedelta(days=post_days_ago)
+                    
+                    from app import Post
+                    post = Post(
+                        user_id=user.id,
+                        content=content,
+                        timestamp=post_timestamp
+                    )
+                    db.session.add(post)
+                
                 db.session.commit()
                 generated_count += 1
                 
@@ -160,6 +190,7 @@ def generate_dummy_data():
             
             print(f"✅ Dummy data generation complete! Generated {generated_count} students")
             print("📊 Generated realistic academic data for analysis")
+            print("📊 Generated social posts for student interaction")
             
     except ImportError as e:
         print(f"⚠️ Faker not available: {e}")
@@ -177,9 +208,10 @@ def start_application():
     print("🎓 Student login: 2024xxxx / password123")
     print("")
     
-    # Start the Flask app
-    from app import app as flask_app
-    flask_app.run(host='0.0.0.0', port=5000, debug=False)
+    # Don't start Flask here - let Gunicorn handle it
+    print("✅ Initialization complete. Gunicorn will start the application...")
+    import sys
+    sys.exit(0)
 
 def main():
     """Main initialization function"""
