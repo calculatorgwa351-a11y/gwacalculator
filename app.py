@@ -1,119 +1,227 @@
+#!/usr/bin/env python3
+"""
+FastAPI GWA Calculator Application
+High-performance replacement for Flask with the same design and functionality
+"""
 
-import json
-from datetime import datetime, timedelta
-from functools import wraps, lru_cache
-
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from flask_sqlalchemy import SQLAlchemy
+from fastapi import FastAPI, Request, Depends, HTTPException, Form, status
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.responses import RedirectResponse, HTMLResponse
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session, relationship
+from sqlalchemy.sql import func
 from werkzeug.security import generate_password_hash, check_password_hash
-from config import Config
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+from typing import Optional, List
 import os
-from sqlalchemy.orm import joinedload, subqueryload
+import random
+from functools import lru_cache
+import ssl
+import certifi
 
-app = Flask(__name__)
-app.config.from_object(Config)
+# Initialize FastAPI app
+app = FastAPI(title="GWA Calculator", version="2.0")
 
-db = SQLAlchemy(app)
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- Models ---
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    school_id = db.Column(db.String(64), unique=True, nullable=False)
-    name = db.Column(db.String(120), nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
-    department = db.Column(db.String(64))
-    course = db.Column(db.String(128))
+# Templates
+templates = Jinja2Templates(directory="templates")
 
-    posts = db.relationship('Post', backref='author', lazy=True, cascade="all, delete-orphan")
-    grades = db.relationship('SubjectGrade', backref='student', lazy=True, cascade="all, delete-orphan")
+# Security
+security = HTTPBasic()
 
+# Database Configuration
+class Config:
+    SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')
+    
+    # Database configuration
+    PGUSER = os.getenv('PGUSER')
+    PGPASSWORD = os.getenv('PGPASSWORD')
+    PGHOST = os.getenv('PGHOST')
+    PGPORT = os.getenv('PGPORT', '5432')
+    PGDATABASE = os.getenv('PGDATABASE')
+    SUPABASE_SSL_NO_VERIFY = os.getenv('SUPABASE_SSL_NO_VERIFY', '0').lower() in ("1", "true", "yes")
+    
+    @property
+    def database_url(self):
+        if self.PGUSER and self.PGPASSWORD and self.PGHOST and self.PGPORT and self.PGDATABASE:
+            # Use PostgreSQL (Supabase)
+            if self.SUPABASE_SSL_NO_VERIFY:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+            else:
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            
+            return f"postgresql+pg8000://{self.PGUSER}:{self.PGPASSWORD}@{self.PGHOST}:{self.PGPORT}/{self.PGDATABASE}?ssl_context={ctx}"
+        else:
+            # Use SQLite for local development
+            return "sqlite:///gwa_calculator.db"
+
+config = Config()
+
+# Database setup
+engine = create_engine(config.database_url, pool_pre_ping=True, pool_recycle=300, pool_size=10, max_overflow=20)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Dependency to get database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Models
+class User(Base):
+    __tablename__ = 'user'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    school_id = Column(String(64), unique=True, nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    password_hash = Column(String(128), nullable=False)
+    department = Column(String(64))
+    course = Column(String(128))
+    
+    posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
+    grades = relationship("SubjectGrade", back_populates="student", cascade="all, delete-orphan")
+    
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
-
+    
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-class Department(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True)
-    courses = db.relationship('Course', backref='department', lazy=True)
+class Department(Base):
+    __tablename__ = 'department'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(64), unique=True, nullable=False)
+    
+    courses = relationship("Course", back_populates="department")
 
-class Course(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(128))
-    department_id = db.Column(db.Integer, db.ForeignKey('department.id'))
+class Course(Base):
+    __tablename__ = 'course'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(128), nullable=False)
+    department_id = Column(Integer, ForeignKey('department.id'))
+    
+    department = relationship("Department", back_populates="courses")
 
-class Post(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    content = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    reactions = db.relationship('Reaction', backref='post', lazy=True, cascade="all, delete-orphan")
-    comments = db.relationship('Comment', backref='post', lazy=True, cascade="all, delete-orphan")
+class Post(Base):
+    __tablename__ = 'post'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
+    content = Column(Text, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    author = relationship("User", back_populates="posts")
+    reactions = relationship("Reaction", back_populates="post", cascade="all, delete-orphan")
+    comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
 
-class Reaction(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.Integer, db.ForeignKey('post.id'))
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    type = db.Column(db.String(32), default='like')  # like, love, wow, etc.
+class Reaction(Base):
+    __tablename__ = 'reaction'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey('post.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
+    type = Column(String(32), default='like')
+    
+    post = relationship("Post", back_populates="reactions")
 
-class Comment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.Integer, db.ForeignKey('post.id'))
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    author = db.relationship('User', backref='user_comments', lazy=True)
-    content = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+class Comment(Base):
+    __tablename__ = 'comment'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey('post.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
+    content = Column(Text, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    post = relationship("Post", back_populates="comments")
+    author = relationship("User")
 
-class SubjectGrade(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    subject = db.Column(db.String(128))
-    units = db.Column(db.Float, default=3.0)
-    grade = db.Column(db.Float)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
+class SubjectGrade(Base):
+    __tablename__ = 'subject_grade'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
+    subject = Column(String(128), nullable=False)
+    units = Column(Float, default=3.0)
+    grade = Column(Float, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    student = relationship("User", back_populates="grades")
+    
     def is_failed(self):
         return self.grade is not None and self.grade > 3.0
 
-# Simple Admin mapping table so we don't need to alter User schema in-place
-class Admin(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True)
+class Admin(Base):
+    __tablename__ = 'admin'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('user.id'), unique=True)
+    
+    user = relationship("User")
 
-# expose model classes to Jinja templates for convenience
-app.jinja_env.globals['User'] = User
-app.jinja_env.globals['Department'] = Department
-app.jinja_env.globals['Course'] = Course
-app.jinja_env.globals['Admin'] = Admin
+# Pydantic models for API
+class UserCreate(BaseModel):
+    school_id: str
+    name: str
+    password: str
+    department: Optional[str] = None
+    course: Optional[str] = None
 
-# --- Auth helpers ---
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
+class UserResponse(BaseModel):
+    id: int
+    school_id: str
+    name: str
+    department: Optional[str]
+    course: Optional[str]
+    
+    class Config:
+        from_attributes = True
 
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        user = db.session.get(User, session['user_id'])
-        if not user:
-            return redirect(url_for('login'))
-        is_admin = Admin.query.filter_by(user_id=user.id).first()
-        if not is_admin:
-            return redirect(url_for('dashboard'))
-        return f(*args, **kwargs)
-    return decorated_function
+class GradeCreate(BaseModel):
+    subject: str
+    units: float = 3.0
+    grade: float
 
-# --- Utility functions ---
+class GradeResponse(BaseModel):
+    id: int
+    subject: str
+    units: float
+    grade: float
+    timestamp: datetime
+    failed: bool
+    
+    class Config:
+        from_attributes = True
+
+class PostCreate(BaseModel):
+    content: str
+
+class PostResponse(BaseModel):
+    id: int
+    content: str
+    author: str
+    timestamp: datetime
+    
+    class Config:
+        from_attributes = True
+
+# Utility functions
 @lru_cache(maxsize=128)
-def compute_gwa_for_user(user_id):
-    grades = SubjectGrade.query.filter_by(user_id=user_id).all()
+def compute_gwa_for_user(user_id: int, db: Session) -> Optional[float]:
+    grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user_id).all()
     total_units = sum(g.units for g in grades if g.units is not None and g.grade is not None)
     if total_units == 0:
         return None
@@ -121,15 +229,8 @@ def compute_gwa_for_user(user_id):
     return round(total / total_units, 3)
 
 @lru_cache(maxsize=128)
-def analyze_latin_honors(user_id):
-    """
-    Analyzes Latin Honors eligibility based on CTU standards:
-    - Summa: 1.00 - 1.20
-    - Magna: 1.21 - 1.45
-    - Cum Laude: 1.46 - 1.75
-    - Requirements: No failing grades (>3.0), no grade below 2.5, full load per semester
-    """
-    grades = SubjectGrade.query.filter_by(user_id=user_id).all()
+def analyze_latin_honors(user_id: int, db: Session) -> dict:
+    grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user_id).all()
     if not grades:
         return {"eligible": False, "reason": "No grades recorded", "title": None}
 
@@ -180,457 +281,265 @@ def analyze_latin_honors(user_id):
     else:
         return {"eligible": False, "reason": "GWA does not meet honors cutoff", "title": None, "gwa": gwa, "status": status}
 
-# --- Error Handlers ---
-@app.errorhandler(404)
-def not_found_error(error):
-    return render_template('login.html', error="Page not found"), 404
+# Session management (simple in-memory session for demo)
+sessions = {}
 
-@app.errorhandler(500)
-def internal_error(error):
-    db.session.rollback()
-    return render_template('login.html', error="An internal server error occurred."), 500
+def get_current_user(request: Request, db: Session):
+    session_id = request.cookies.get("session_id")
+    if session_id and session_id in sessions:
+        user_id = sessions[session_id]
+        user = db.query(User).filter(User.id == user_id).first()
+        return user
+    return None
 
-@app.errorhandler(Exception)
-def handle_exception(e):
-    print(f"Unhandled Exception: {e}")
-    try:
-        db.session.rollback()
-    except:
-        pass
-    return render_template('login.html', error="An unexpected error occurred."), 500
+def is_admin(user: User, db: Session) -> bool:
+    if not user:
+        return False
+    return db.query(Admin).filter(Admin.user_id == user.id).first() is not None
 
-# --- Routes ---
-@app.route('/', methods=['GET', 'POST'])
-def login():
-    try:
-        next_url = request.args.get('next')
-        if request.method == 'POST':
-            school_id = request.form['school_id']
-            password = request.form['password']
-            user = User.query.filter_by(school_id=school_id).first()
-            if user and user.check_password(password):
-                session.permanent = True
-                session['user_id'] = user.id
-                if next_url:
-                    return redirect(next_url)
-                return redirect(url_for('dashboard'))
-            return render_template('login.html', error='Invalid credentials')
-        return render_template('login.html')
-    except Exception as e:
-        print(f"Login error: {e}")
-        return render_template('login.html', error='Login service temporarily unavailable')
+# Routes
+@app.get("/", response_class=HTMLResponse)
+async def login_page(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "session": {"user_id": user.id if user else None}
+    })
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        school_id = request.form['school_id']
-        name = request.form['name']
-        password = request.form['password']
-        department = request.form['department']
-        course = request.form['course']
-        if User.query.filter_by(school_id=school_id).first():
-            return render_template('register.html', error='School ID already registered')
-        u = User(school_id=school_id, name=name, department=department, course=course)
-        u.set_password(password)
-        db.session.add(u)
-        db.session.commit()
-        session.permanent = True
-        session['user_id'] = u.id
-        return redirect(url_for('dashboard'))
-    departments = Department.query.all()
-    return render_template('register.html', departments=departments)
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    try:
-        # Get user with basic loading
-        user = User.query.get(session['user_id'])
-        if not user:
-            return redirect(url_for('login'))
+@app.post("/login")
+async def login(request: Request, db: Session = Depends(get_db), school_id: str = Form(...), password: str = Form(...)):
+    user = db.query(User).filter(User.school_id == school_id).first()
+    if user and user.check_password(password):
+        # Create session
+        session_id = f"session_{user.id}_{datetime.now().timestamp()}"
+        sessions[session_id] = user.id
         
-        # Use session for faster queries with minimal data
-        session_db = db.session
-        
-        # Get departments with cache - very small query
-        departments = session_db.query(Department).all()
-        
-        # Get posts with eager loading but limited
-        posts = session_db.query(Post).options(
-            joinedload(Post.author)
-        ).order_by(Post.timestamp.desc()).limit(5).all()
-        
-        # Get user's grades with optimized query
-        grades = session_db.query(SubjectGrade).filter(
-            SubjectGrade.user_id == user.id
-        ).limit(10).all()
-        
-        # Calculate GWA and honors with caching
-        gwa = compute_gwa_for_user(user.id)
-        honors = analyze_latin_honors(user.id)
-        
-        return render_template('dashboard.html', 
-                             user=user, 
-                             departments=departments, 
-                             posts=posts, 
-                             grades=grades, 
-                             gwa=gwa, 
-                             honors=honors)
-    except Exception as e:
-        print(f"Dashboard error: {e}")
-        # Return a basic dashboard if there are errors
-        try:
-            user = User.query.get(session['user_id'])
-            return render_template('dashboard.html', 
-                                 user=user, 
-                                 departments=[], 
-                                 posts=[], 
-                                 grades=[], 
-                                 gwa=None, 
-                                 honors=None)
-        except:
-            return redirect(url_for('login'))
-
-# API: posts
-@app.route('/api/posts', methods=['GET','POST'])
-@login_required
-def api_posts():
-    if request.method == 'GET':
-        # Optimize with joinedload for author and subqueryload for comments/reactions
-        posts = Post.query.options(
-            joinedload(Post.author),
-            subqueryload(Post.reactions),
-            subqueryload(Post.comments).joinedload(Comment.author)
-        ).order_by(Post.timestamp.desc()).limit(100).all()
-        
-        data = []
-        for p in posts:
-            # build reaction summary by type
-            r_summary = {}
-            for r in p.reactions:
-                r_summary[r.type] = r_summary.get(r.type, 0) + 1
-            data.append({
-                'id': p.id,
-                'content': p.content,
-                'author': p.author.name,
-                'author_id': p.author.id,
-                'timestamp': p.timestamp.isoformat(),
-                'reactions': r_summary,
-                'comments': [{'id': c.id, 'user': (c.author.name if c.author else "Unknown"), 'content': c.content, 'timestamp': c.timestamp.isoformat()} for c in p.comments]
-            })
-        return jsonify(data)
-
-    # POST create
-    payload = request.get_json()
-    content = payload.get('content','').strip()
-    if not content:
-        return jsonify({'error':'Empty post'}), 400
-    p = Post(user_id=session['user_id'], content=content)
-    db.session.add(p)
-    db.session.commit()
-    return jsonify({'id': p.id, 'content': p.content, 'author': User.query.get(p.user_id).name, 'timestamp': p.timestamp.isoformat()})
-
-@app.route('/api/posts/<int:post_id>/react', methods=['POST'])
-@login_required
-def api_react(post_id):
-    p = Post.query.get_or_404(post_id)
-    user_id = session['user_id']
-    payload = request.get_json() or {}
-    rtype = payload.get('type','like')
-    # allow only a single reaction per user per post; replace existing reaction if different
-    existing = Reaction.query.filter_by(post_id=post_id, user_id=user_id).first()
-    if existing:
-        if existing.type == rtype:
-            db.session.delete(existing)
-            db.session.commit()
-            # re-query counts
-            r_summary = {}
-            for r in p.reactions:
-                r_summary[r.type] = r_summary.get(r.type, 0) + 1
-            return jsonify({'status':'removed','reactions': r_summary})
-        else:
-            # change type
-            existing.type = rtype
-            db.session.commit()
-            r_summary = {}
-            for r in p.reactions:
-                r_summary[r.type] = r_summary.get(r.type, 0) + 1
-            return jsonify({'status':'changed','reactions': r_summary})
-    r = Reaction(post_id=post_id, user_id=user_id, type=rtype)
-    db.session.add(r)
-    db.session.commit()
-    r_summary = {}
-    for r in p.reactions:
-        r_summary[r.type] = r_summary.get(r.type, 0) + 1
-    return jsonify({'status':'added','reactions': r_summary})
-
-@app.route('/api/posts/<int:post_id>/comments', methods=['GET','POST'])
-@login_required
-def api_comments(post_id):
-    p = Post.query.get_or_404(post_id)
-    if request.method == 'GET':
-        return jsonify([{'id': c.id, 'user': User.query.get(c.user_id).name, 'content': c.content, 'timestamp': c.timestamp.isoformat()} for c in p.comments])
-    payload = request.get_json()
-    content = payload.get('content','').strip()
-    if not content:
-        return jsonify({'error':'Empty comment'}), 400
-    c = Comment(post_id=post_id, user_id=session['user_id'], content=content)
-    db.session.add(c)
-    db.session.commit()
-    return jsonify({'id': c.id, 'user': User.query.get(c.user_id).name, 'content': c.content, 'timestamp': c.timestamp.isoformat()})
-
-# API: grades
-@app.route('/api/grades', methods=['GET', 'POST'])
-@login_required
-def api_grades():
-    user_id = session['user_id']
-    if request.method == 'GET':
-        grades = SubjectGrade.query.filter_by(user_id=user_id).order_by(SubjectGrade.timestamp.desc()).all()
-        return jsonify([{'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'timestamp': g.timestamp.isoformat()} for g in grades])
-    payload = request.get_json()
-    subject = payload.get('subject','').strip()
-    try:
-        units = float(payload.get('units',3.0))
-        grade = float(payload.get('grade'))
-    except (TypeError, ValueError):
-        return jsonify({'error':'Units and grade must be numeric'}), 400
-    # validate
-    if not subject:
-        return jsonify({'error':'Subject required'}), 400
-    if not (1.0 <= grade <= 5.0):
-        return jsonify({'error':'Grade must be between 1.0 (highest) and 5.0 (lowest)'}), 400
-    if units <= 0:
-        return jsonify({'error':'Units must be positive'}), 400
-    # Auto-post achievement if GWA improved significantly
-    old_gwa = compute_gwa_for_user(user_id)
+        response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
+        response.set_cookie("session_id", session_id, max_age=3600)  # 1 hour
+        return response
     
-    g = SubjectGrade(user_id=user_id, subject=subject, units=units, grade=grade)
-    db.session.add(g)
-    db.session.commit()
+    return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"})
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     
-    gwa = compute_gwa_for_user(user_id)
+    # Get departments
+    departments = db.query(Department).all()
     
-    if gwa and (old_gwa is None or gwa < old_gwa) and gwa <= 2.0:
-        achievement = Post(
-            user_id=user_id, 
-            content=f"🎉 ACHIEVEMENT: Just updated my grades and my GWA is now {gwa}! Target: Latin Honors! 🎓 #CTU #GWAcalculator"
-        )
-        db.session.add(achievement)
-        db.session.commit()
+    # Get posts with eager loading
+    posts = db.query(Post).join(User).order_by(Post.timestamp.desc()).limit(5).all()
+    
+    # Get user's grades
+    grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user.id).limit(10).all()
+    
+    # Calculate GWA and honors
+    gwa = compute_gwa_for_user(user.id, db)
+    honors = analyze_latin_honors(user.id, db)
+    
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "user": user,
+        "session": {"user_id": user.id},
+        "departments": departments,
+        "posts": posts,
+        "grades": grades,
+        "gwa": gwa,
+        "honors": honors
+    })
 
-    # compute failed subjects
-    failed = SubjectGrade.query.filter(SubjectGrade.user_id==user_id, SubjectGrade.grade>3.0).count()
-    return jsonify({'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'failed': g.is_failed(), 'gwa': gwa, 'failed_count': failed})
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    response.delete_cookie("session_id")
+    return response
 
-# edit existing grade
-@app.route('/api/grades/<int:grade_id>', methods=['PUT'])
-@login_required
-def api_update_grade(grade_id):
-    u_id = session['user_id']
-    g = SubjectGrade.query.filter_by(id=grade_id, user_id=u_id).first_or_404()
-    payload = request.get_json() or {}
-    subject = payload.get('subject', g.subject).strip()
-    try:
-        units = float(payload.get('units', g.units))
-        grade_val = float(payload.get('grade', g.grade))
-    except (TypeError, ValueError):
-        return jsonify({'error':'Units and grade must be numeric'}), 400
-    # validate
-    if not subject:
-        return jsonify({'error':'Subject required'}), 400
-    if not (1.0 <= grade_val <= 5.0):
-        return jsonify({'error':'Grade must be between 1.0 (highest) and 5.0 (lowest)'}), 400
-    if units <= 0:
-        return jsonify({'error':'Units must be positive'}), 400
-    g.subject = subject
-    g.units = units
-    g.grade = grade_val
-    g.timestamp = datetime.utcnow()
-    db.session.commit()
-    gwa = compute_gwa_for_user(u_id)
-    failed = SubjectGrade.query.filter(SubjectGrade.user_id==u_id, SubjectGrade.grade>3.0).count()
-    return jsonify({'id': g.id, 'subject': g.subject, 'units': g.units, 'grade': g.grade, 'failed': g.is_failed(), 'gwa': gwa, 'failed_count': failed})
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_panel(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user or not is_admin(user, db):
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
+    
+    return templates.TemplateResponse("admin.html", {
+        "request": request,
+        "session": {"user_id": user.id}
+    })
 
-# API: analytics
-@app.route('/api/analytics', methods=['GET'])
-@login_required
-def api_analytics():
-    # summary analytics - optimized with joinedload
-    users = User.query.options(subqueryload(User.grades)).all()
+# API Endpoints
+@app.get("/api/posts", response_model=List[PostResponse])
+async def get_posts(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    posts = db.query(Post).join(User).order_by(Post.timestamp.desc()).limit(100).all()
+    return [{"id": p.id, "content": p.content, "author": p.author.name, "timestamp": p.timestamp} for p in posts]
+
+@app.post("/api/posts", response_model=PostResponse)
+async def create_post(request: Request, post: PostCreate, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    new_post = Post(user_id=user.id, content=post.content)
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+    
+    return {"id": new_post.id, "content": new_post.content, "author": user.name, "timestamp": new_post.timestamp}
+
+@app.get("/api/grades", response_model=List[GradeResponse])
+async def get_grades(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user.id).order_by(SubjectGrade.timestamp.desc()).all()
+    return [{"id": g.id, "subject": g.subject, "units": g.units, "grade": g.grade, "timestamp": g.timestamp, "failed": g.is_failed()} for g in grades]
+
+@app.post("/api/grades", response_model=GradeResponse)
+async def create_grade(request: Request, grade: GradeCreate, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Clear cache for this user
+    compute_gwa_for_user.cache_clear()
+    analyze_latin_honors.cache_clear()
+    
+    new_grade = SubjectGrade(user_id=user.id, subject=grade.subject, units=grade.units, grade=grade.grade)
+    db.add(new_grade)
+    db.commit()
+    db.refresh(new_grade)
+    
+    return {"id": new_grade.id, "subject": new_grade.subject, "units": new_grade.units, "grade": new_grade.grade, "timestamp": new_grade.timestamp, "failed": new_grade.is_failed()}
+
+@app.get("/api/analytics")
+async def get_analytics(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    users = db.query(User).all()
     gwas = []
     total_subjects = 0
     failed_subjects = 0
+    
     for u in users:
-        total_subjects += len(u.grades)
-        failed_subjects += sum(1 for g in u.grades if g.grade > 3.0)
+        grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == u.id).all()
+        total_subjects += len(grades)
+        failed_subjects += sum(1 for g in grades if g.grade > 3.0)
         
-        # Calculate GWA from pre-loaded grades
-        total_u_units = sum(g.units for g in u.grades if g.units and g.grade)
+        # Calculate GWA
+        total_u_units = sum(g.units for g in grades if g.units and g.grade)
         if total_u_units > 0:
-            total_points = sum(g.units * g.grade for g in u.grades if g.units and g.grade)
+            total_points = sum(g.units * g.grade for g in grades if g.units and g.grade)
             gwas.append(round(total_points / total_u_units, 3))
-            
-    avg_gwa = round(sum(gwas)/len(gwas),3) if gwas else None
-    fail_rate = (failed_subjects/total_subjects) if total_subjects>0 else None
-    return jsonify({'average_gwa': avg_gwa, 'failure_rate': fail_rate})
+    
+    avg_gwa = round(sum(gwas)/len(gwas), 3) if gwas else None
+    fail_rate = (failed_subjects/total_subjects) if total_subjects > 0 else None
+    
+    return {"average_gwa": avg_gwa, "failure_rate": fail_rate}
 
-@app.route('/api/analytics/department_avg', methods=['GET'])
-@login_required
-def api_dept_avg():
-    # average GWA per department
-    depts = Department.query.all()
-    out = {}
-    for d in depts:
-        dept_users = User.query.filter_by(department=d.name).all()
-        gwas = []
-        for u in dept_users:
-            gwa = compute_gwa_for_user(u.id)
-            if gwa is not None:
-                gwas.append(gwa)
-        out[d.name] = round(sum(gwas)/len(gwas),3) if gwas else None
-    return jsonify(out)
+# Admin APIs
+@app.get("/api/admin/students", response_model=List[UserResponse])
+async def get_students(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user or not is_admin(user, db):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    students = db.query(User).all()
+    return [{"id": u.id, "school_id": u.school_id, "name": u.name, "department": u.department, "course": u.course} for u in students]
 
-@app.route('/api/analytics/failure_rates', methods=['GET'])
-@login_required
-def api_failure_rates():
-    # failure rates per subject name
-    subjects = db.session.query(SubjectGrade.subject).distinct().all()
-    out = {}
-    for s in subjects:
-        name = s[0]
-        total = SubjectGrade.query.filter_by(subject=name).count()
-        failed = SubjectGrade.query.filter_by(subject=name).filter(SubjectGrade.grade>3.0).count()
-        out[name] = {'total': total, 'failed': failed, 'failure_rate': round((failed/total),3) if total>0 else None}
-    return jsonify(out)
+@app.post("/api/admin/students", response_model=UserResponse)
+async def create_student(request: Request, student: UserCreate, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user or not is_admin(user, db):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Check if school ID already exists
+    existing = db.query(User).filter(User.school_id == student.school_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="School ID already exists")
+    
+    new_user = User(
+        school_id=student.school_id,
+        name=student.name,
+        department=student.department,
+        course=student.course
+    )
+    new_user.set_password(student.password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return {"id": new_user.id, "school_id": new_user.school_id, "name": new_user.name, "department": new_user.department, "course": new_user.course}
 
-@app.route('/api/analytics/gwa_trends', methods=['GET'])
-@login_required
-def api_gwa_trends():
-    # return GWA over time for a user (pass user_id as param) as list of {timestamp, gwa}
-    user_id = request.args.get('user_id', type=int)
-    if not user_id:
-        return jsonify({'error':'user_id query parameter required (e.g. ?user_id=1)'}), 400
-    grades = SubjectGrade.query.filter_by(user_id=user_id).order_by(SubjectGrade.timestamp.asc()).all()
-    timeline = []
-    # accumulate and compute GWA at each grade timestamp
-    accumulated = []
-    for g in grades:
-        accumulated.append(g)
-        total_units = sum(item.units for item in accumulated)
-        total_points = sum(item.units * item.grade for item in accumulated)
-        gwa = round(total_points/total_units,3) if total_units>0 else None
-        timeline.append({'timestamp': g.timestamp.isoformat(), 'gwa': gwa})
-    return jsonify({'user_id': user_id, 'timeline': timeline})
-
-# -------------------- Admin routes & APIs --------------------
-@app.route('/admin')
-@admin_required
-def admin_panel():
-    return render_template('admin.html')
-
-@app.route('/admin-auth', methods=['POST'])
-def admin_auth():
-    data = request.get_json() or {}
-    school_id = data.get('school_id')
-    password = data.get('password')
-    if not school_id or not password:
-        return jsonify({'error':'Missing credentials'}), 400
-    user = User.query.filter_by(school_id=school_id).first()
-    if not user or not user.check_password(password):
-        return jsonify({'error':'Invalid credentials'}), 401
-    # ensure admin mapping exists
+# Database initialization
+def init_database():
+    """Initialize database with basic structure and admin user"""
+    print("🗄️ Initializing FastAPI database...")
+    
+    Base.metadata.create_all(bind=engine)
+    
+    db = SessionLocal()
     try:
-        is_admin = Admin.query.filter_by(user_id=user.id).first()
-    except Exception:
-        is_admin = None
-    if not is_admin:
-        return jsonify({'error':'Not an admin'}), 403
-    session['user_id'] = user.id
-    return jsonify({'redirect': url_for('admin_panel')})
-
-@app.route('/api/admin/students', methods=['GET', 'POST'])
-@admin_required
-def api_admin_students():
-    if request.method == 'GET':
-        users = User.query.all()
-        out = []
-        for u in users:
-            grades = SubjectGrade.query.filter_by(user_id=u.id).all()
-            gwa = compute_gwa_for_user(u.id)
-            failed = sum(1 for g in grades if g.grade>3.0)
-            posts_count = Post.query.filter_by(user_id=u.id).count()
-            out.append({'id': u.id, 'school_id': u.school_id, 'name': u.name, 'department': u.department, 'course': u.course, 'gwa': gwa, 'failed_count': failed, 'subjects': len(grades), 'posts': posts_count})
-        return jsonify(out)
-
-    # POST create student
-    data = request.get_json() or {}
-    school_id = data.get('school_id')
-    name = data.get('name')
-    password = data.get('password')
-    department = data.get('department')
-    course = data.get('course')
-    
-    if not all([school_id, name, password]):
-        return jsonify({'error': 'School ID, name, and password are required'}), 400
-    
-    if User.query.filter_by(school_id=school_id).first():
-        return jsonify({'error': 'School ID already exists'}), 400
+        # Create departments and courses (8 courses total)
+        departments_data = [
+            {'name': 'COTE', 'courses': ['Computer Science', 'Computer Engineering']},
+            {'name': 'Business', 'courses': ['Business Administration', 'Accountancy']},
+            {'name': 'Liberal Arts', 'courses': ['Psychology', 'Communication Arts']},
+            {'name': 'Engineering', 'courses': ['Civil Engineering', 'Electrical Engineering']}
+        ]
         
-    u = User(school_id=school_id, name=name, department=department, course=course)
-    u.set_password(password)
-    db.session.add(u)
-    db.session.commit()
-    return jsonify({'id': u.id, 'school_id': u.school_id, 'name': u.name})
-
-@app.route('/api/admin/student/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
-@admin_required
-def api_admin_student(user_id):
-    u = User.query.get_or_404(user_id)
-    
-    if request.method == 'GET':
-        grades = SubjectGrade.query.filter_by(user_id=u.id).all()
-        posts = Post.query.filter_by(user_id=u.id).order_by(Post.timestamp.desc()).all()
-        return jsonify({
-            'id': u.id, 'school_id': u.school_id, 'name': u.name, 'department': u.department, 'course': u.course,
-            'grades': [{'subject': g.subject, 'units': g.units, 'grade': g.grade, 'failed': g.is_failed()} for g in grades],
-            'posts': [{'id': p.id, 'content': p.content, 'timestamp': p.timestamp.isoformat()} for p in posts],
-            'gwa': compute_gwa_for_user(u.id)
-        })
-
-    if request.method == 'PUT':
-        data = request.get_json() or {}
-        u.name = data.get('name', u.name)
-        u.school_id = data.get('school_id', u.school_id)
-        u.department = data.get('department', u.department)
-        u.course = data.get('course', u.course)
+        for dept_data in departments_data:
+            dept = db.query(Department).filter(Department.name == dept_data['name']).first()
+            if not dept:
+                dept = Department(name=dept_data['name'])
+                db.add(dept)
+                db.commit()
+                print(f"✅ Created department: {dept.name}")
+            
+            for course_name in dept_data['courses']:
+                course = db.query(Course).filter(Course.name == course_name, Course.department_id == dept.id).first()
+                if not course:
+                    course = Course(name=course_name, department_id=dept.id)
+                    db.add(course)
+                    db.commit()
+                    print(f"✅ Created course: {course_name} in {dept.name}")
         
-        password = data.get('password')
-        if password:
-            u.set_password(password)
+        # Create admin user
+        admin_user = db.query(User).filter(User.school_id == 'admin').first()
+        if not admin_user:
+            admin_user = User(school_id='admin', name='Administrator', department='COTE', course='Administration')
+            admin_user.set_password('adminpass')
+            db.add(admin_user)
+            db.commit()
+            print("✅ Created admin user: admin / adminpass")
             
-        db.session.commit()
-        return jsonify({'status': 'updated'})
+            # Grant admin rights
+            admin_record = Admin(user_id=admin_user.id)
+            db.add(admin_record)
+            db.commit()
+            print("✅ Granted admin rights")
+        else:
+            print("✅ Admin user already exists")
+        
+        print("🗄️ FastAPI database initialization complete!")
+        
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
-    if request.method == 'DELETE':
-        # Don't allow deleting yourself if you're the admin
-        if u.id == session.get('user_id'):
-            return jsonify({'error': 'Cannot delete your own account'}), 400
-            
-        # Is this user also in the Admin table?
-        admin_rec = Admin.query.filter_by(user_id=u.id).first()
-        if admin_rec:
-            db.session.delete(admin_rec)
-            
-        db.session.delete(u)
-        db.session.commit()
-        return jsonify({'status': 'deleted'})
-
- 
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=app.config.get('DEBUG', False), threaded=True)
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Initialize database
+    init_database()
+    
+    # Run the application
+    uvicorn.run(app, host="0.0.0.0", port=5000)

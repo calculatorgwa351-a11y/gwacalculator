@@ -1,14 +1,14 @@
 services:
   - type: web
     name: gwacalculator
-    env: python
+    runtime: python
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python init_render.py && gunicorn app:app --workers ${WEB_CONCURRENCY:-2} --threads ${WEB_THREADS:-2} --bind 0.0.0.0:${PORT}
+    startCommand: python init.py && uvicorn app:app --host 0.0.0.0 --port $PORT --workers 2
     envVars:
       - key: PYTHON_VERSION
-        value: 3.12.5
+        value: 3.11.5
       - key: SECRET_KEY
         generateValue: true
       # Supabase PostgreSQL Configuration

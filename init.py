@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi_main import app, engine, User, Department, Course, Admin, SubjectGrade, Post
+from app import app, engine, User, Department, Course, Admin, SubjectGrade, Post
 
 def generate_dummy_data():
     """Generate comprehensive dummy data for testing and analysis"""
@@ -155,7 +155,7 @@ def main():
     print("=" * 50)
     
     # Initialize database
-    from fastapi_main import init_database
+    from app import init_database
     init_database()
     
     # Generate dummy data
