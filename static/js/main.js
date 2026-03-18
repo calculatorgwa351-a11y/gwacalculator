@@ -65,14 +65,21 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Update UI
       sidebarLinks.forEach(l => {
-        l.classList.remove('active', 'bg-blue-600', 'text-white');
-        l.classList.add('text-slate-600');
+        if (l.classList) {
+          l.classList.remove('active', 'bg-blue-600', 'text-white');
+          l.classList.add('text-slate-600');
+        }
       });
-      link.classList.add('active', 'bg-blue-600', 'text-white');
-      link.classList.remove('text-slate-600');
+      if (link.classList) {
+        link.classList.add('active', 'bg-blue-600', 'text-white');
+        link.classList.remove('text-slate-600');
+      }
 
-      viewSections.forEach(s => s.classList.add('hidden'));
-      document.getElementById(`view-${viewId}`).classList.remove('hidden');
+      viewSections.forEach(s => {
+        if (s.classList) s.classList.add('hidden');
+      });
+      const targetView = document.getElementById(`view-${viewId}`);
+      if (targetView && targetView.classList) targetView.classList.remove('hidden');
       
       if (viewTitle) viewTitle.textContent = views[viewId];
 
@@ -81,7 +88,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (viewId === 'social') refreshPosts();
       if (viewId === 'handbook') {
         // Scroll to top when opening handbook
-        document.querySelector('main').scrollTop = 0;
+        const main = document.querySelector('main');
+        if (main) main.scrollTop = 0;
       }
     });
   });
@@ -112,22 +120,66 @@ document.addEventListener('DOMContentLoaded', () => {
           borderColor: '#2563eb',
           backgroundColor: 'rgba(37, 99, 235, 0.1)',
           fill: true,
-          tension: 0.4
+          tension: 0.4,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: '#2563eb',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: {
+          intersect: false,
+          mode: 'index',
+        },
         scales: {
           y: {
             beginAtZero: false,
-            reverse: true, // Philippine GWA: 1.0 is best, 5.0 is failing
+            reverse: true,
             suggestedMin: 1.0,
-            suggestedMax: 5.0
+            suggestedMax: 5.0,
+            grid: {
+              color: 'rgba(0, 0, 0, 0.05)'
+            },
+            ticks: {
+              font: { weight: 'bold' }
+            }
+          },
+          x: {
+            grid: { display: false },
+            ticks: {
+              font: { weight: 'bold' }
+            }
           }
         },
         plugins: {
-          legend: { display: false }
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1e293b',
+            titleFont: { size: 14, weight: 'bold' },
+            bodyFont: { size: 13 },
+            padding: 12,
+            cornerRadius: 12,
+            callbacks: {
+              label: function(context) {
+                return ` GWA: ${context.parsed.y.toFixed(3)}`;
+              },
+              afterBody: function(context) {
+                return '\nClick point to view details';
+              }
+            }
+          }
+        },
+        onClick: (e, elements) => {
+          if (elements.length > 0) {
+            const index = elements[0].index;
+            const timestamp = data.timeline[index].timestamp;
+            // Highlight relevant grade in the list if needed
+            console.log('Clicked point at', timestamp);
+          }
         }
       }
     });
@@ -142,27 +194,29 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshPosts();
   }
 
-    // Post elements
+  // Post elements
   const postBtn = document.getElementById('postBtn');
   const refreshFeedBtn = document.getElementById('refreshFeed');
   const postContent = document.getElementById('postContent');
   const postsDiv = document.getElementById('posts');
 
-  // Simple client-side cache
-  let postsCache = null;
+  let postsPage = 1;
+  let loadingPosts = false;
+  let allPostsLoaded = false;
 
   async function refreshPosts(force = false) {
     if (!postsDiv) return;
-    
-    // Use cache if available and not forcing refresh
-    if (postsCache && !force) {
-      renderPostsFromCache();
-      return;
+    if (force) {
+      postsPage = 1;
+      allPostsLoaded = false;
+      postsDiv.innerHTML = '';
     }
+    
+    if (loadingPosts || allPostsLoaded) return;
+    loadingPosts = true;
 
-    // Show skeleton if it's the first load or forced
-    const skeleton = postsDiv.querySelector('.skeleton-loader');
-    if (!skeleton) {
+    // Show skeleton loader for first page
+    if (postsPage === 1) {
       postsDiv.innerHTML = `
         <div class="skeleton-loader space-y-6">
           <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm animate-pulse">
@@ -173,25 +227,53 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      const res = await fetch('/api/posts');
+      const res = await fetch(`/api/posts?page=${postsPage}&limit=10`);
       if (!res.ok) throw new Error('Failed to fetch posts');
       const data = await res.json();
-      postsCache = data;
-      renderPostsFromCache();
+      
+      if (postsPage === 1) postsDiv.innerHTML = '';
+      
+      if (data.length < 10) {
+        allPostsLoaded = true;
+      }
+
+      if (data.length === 0 && postsPage === 1) {
+        postsDiv.innerHTML = '<div class="text-center p-12 text-slate-400 font-medium italic">No posts yet. Be the first to share!</div>';
+      } else {
+        data.forEach(p => postsDiv.appendChild(renderPost(p)));
+        postsPage++;
+      }
+      
+      // Add a small end of feed indicator
+      if (allPostsLoaded && postsDiv.children.length > 0) {
+        const endMsg = document.createElement('div');
+        endMsg.className = 'text-center p-8 text-slate-400 text-xs font-bold uppercase tracking-widest';
+        endMsg.textContent = 'You have reached the end of the feed';
+        postsDiv.appendChild(endMsg);
+      }
+
     } catch (err) {
       console.error(err);
-      postsDiv.innerHTML = '<div class="text-center p-8 text-slate-400 font-medium">Failed to load feed. Please try again.</div>';
+      if (postsPage === 1) {
+        postsDiv.innerHTML = '<div class="text-center p-8 text-slate-400 font-medium">Failed to load feed. Please try again.</div>';
+      }
+    } finally {
+      loadingPosts = false;
     }
   }
 
-  function renderPostsFromCache() {
-    if (!postsCache || !postsDiv) return;
-    postsDiv.innerHTML = '';
-    if (postsCache.length === 0) {
-      postsDiv.innerHTML = '<div class="text-center p-12 text-slate-400 font-medium italic">No posts yet. Be the first to share!</div>';
-      return;
-    }
-    postsCache.forEach(p => postsDiv.appendChild(renderPost(p)));
+  // Infinite Scroll for Social Feed
+  const mainContent = document.querySelector('main');
+  if (mainContent) {
+    mainContent.addEventListener('scroll', () => {
+      const viewSocial = document.getElementById('view-social');
+      if (viewSocial && !viewSocial.classList.contains('hidden')) {
+        const { scrollTop, scrollHeight, clientHeight } = mainContent;
+        if (scrollTop + clientHeight >= scrollHeight - 100) {
+          refreshPosts();
+        }
+      }
+    });
   }
 
   if (refreshFeedBtn) {
@@ -347,18 +429,29 @@ document.addEventListener('DOMContentLoaded', () => {
         if (gradeList) {
           const li = document.createElement('li');
           li.dataset.id = json.id;
-          li.className = 'flex justify-between items-center bg-gray-50/50 p-3 rounded-xl border border-black/5 animate-in zoom-in-95 duration-300';
+          li.className = 'py-4 flex justify-between items-center group animate-in zoom-in-95 duration-300';
           li.innerHTML = `
+            <div class="flex items-center gap-4">
+              <div class="w-10 h-10 bg-slate-50 rounded-xl flex flex-col items-center justify-center border border-slate-100">
+                <span class="text-[8px] font-black text-slate-400 leading-none">YR</span>
+                <span class="text-xs font-black text-slate-800">${json.year}</span>
+              </div>
               <div>
-                <div class="font-bold text-sm">${escapeHtml(json.subject)}</div>
-                <div class="text-[10px] text-gray-400 uppercase font-medium">Y${json.year} S${json.semester} • ${json.units} units</div>
+                <div class="font-bold text-slate-800">${escapeHtml(json.subject)}</div>
+                <div class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">SEM ${json.semester} • ${json.units} UNITS</div>
               </div>
-              <div class="flex items-center gap-3">
-                <span class="font-bold text-blue-600">${json.grade}</span>
-                <button class="editGrade text-gray-300 hover:text-black transition-colors">✎</button>
+            </div>
+            <div class="flex items-center gap-6">
+              <div class="text-right">
+                <div class="text-lg font-black ${json.grade > 3.0 ? 'text-red-500' : 'text-blue-600'} tracking-tighter">${json.grade}</div>
+                <div class="text-[8px] font-black uppercase text-slate-300">Mark</div>
               </div>
-            `;
-          gradeList.appendChild(li);
+              <button class="editGrade p-2 text-slate-200 hover:text-slate-900 transition-colors opacity-0 group-hover:opacity-100">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+            </div>
+          `;
+          gradeList.prepend(li);
         }
         if (gwaSpan) gwaSpan.textContent = json.gwa || '—';
         if (json.gwa) {
@@ -419,9 +512,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const grades = [];
       const items = document.querySelectorAll('#gradeList li');
       items.forEach(li => {
-        const subject = li.querySelector('.font-bold.text-sm').textContent;
-        const units = li.querySelector('.text-xs.text-gray-400').textContent.replace(' units', '');
-        const grade = li.querySelector('.font-bold.text-blue-600').textContent;
+        const subject = li.querySelector('.font-bold.text-slate-800').textContent;
+        const info = li.querySelector('.text-[10px].text-slate-400').textContent;
+        const unitsMatch = info.match(/(\d+\.?\d*)\s*UNITS/i);
+        const units = unitsMatch ? unitsMatch[1] : '3.0';
+        const grade = li.querySelector('.font-black.tracking-tighter').textContent;
         grades.push({ subject, units, grade });
       });
 
@@ -479,10 +574,25 @@ document.addEventListener('DOMContentLoaded', () => {
         adminError.classList.remove('hidden');
         return;
       }
-      const res = await fetch('/admin-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ school_id: sid, password: pwd }) });
-      const j = await res.json();
-      if (res.ok && j.redirect) { window.location = j.redirect; }
-      else {
+      const res = await fetch('/api/login', { 
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }, 
+        body: `school_id=${encodeURIComponent(sid)}&password=${encodeURIComponent(pwd)}` 
+      });
+      let j;
+      try {
+        j = await res.json();
+      } catch (e) {
+        adminError.textContent = 'Server error: invalid response';
+        adminError.classList.remove('hidden');
+        console.error('Login error:', e);
+        return;
+      }
+      if (res.ok && j.success && j.redirect) { 
+        window.location.href = j.redirect; 
+      } else {
         adminError.textContent = j.error || 'Authentication failed';
         adminError.classList.remove('hidden');
       }

@@ -31,4 +31,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/ || exit 1
 
 # Command to run the application
-CMD ["sh", "-c", "python init.py && uvicorn app:app --host 0.0.0.0 --port 5000 --workers 4"]
+CMD ["sh", "-c", "python init.py && uvicorn app.main:app --host 0.0.0.0 --port 5000 --workers 4"]

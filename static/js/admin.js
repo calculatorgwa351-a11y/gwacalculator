@@ -28,27 +28,61 @@ document.addEventListener('DOMContentLoaded', async () => {
     const container = document.getElementById(containerId);
     if (!container) return;
     clearEl(container);
-    if (!values || values.length === 0) return;
+    
+    // Validation: Ensure values is an array and contains numbers
+    if (!Array.isArray(values) || values.length === 0) {
+      container.innerHTML = '<div class="flex items-center justify-center h-full text-slate-300 italic text-xs">No data available</div>';
+      return;
+    }
+
     const width = 420, height = 200, padding = 40;
     const svg = createSVG(width, height);
-    const max = Math.max(...values, 0.001);
-    const barW = (width - padding * 2) / values.length * 0.7;
+    
+    // Ensure max is at least a small positive number to avoid division by zero/NaN
+    const numericValues = values.map(v => {
+      const n = parseFloat(v);
+      return isNaN(n) ? 0 : n;
+    });
+    const max = Math.max(...numericValues, 0.1);
+    const barW = (width - padding * 2) / numericValues.length * 0.7;
 
-    values.forEach((v, i) => {
-      const x = padding + i * ((width - padding * 2) / values.length) + ((width - padding * 2) / values.length - barW) / 2;
+    numericValues.forEach((v, i) => {
+      const x = padding + i * ((width - padding * 2) / numericValues.length) + ((width - padding * 2) / numericValues.length - barW) / 2;
       const h = (v / max) * (height - padding * 2);
-      const y = height - padding - h;
+      
+      // Ensure h and y are valid numbers
+      const safeH = isNaN(h) ? 0 : Math.max(0, h);
+      const safeY = height - padding - safeH;
 
       const rect = document.createElementNS(svg.namespaceURI, 'rect');
-      rect.setAttribute('x', x); rect.setAttribute('y', y); rect.setAttribute('width', barW); rect.setAttribute('height', h);
-      rect.setAttribute('fill', opts.fill || '#3b82f6'); rect.setAttribute('rx', '4');
+      rect.setAttribute('x', x); 
+      rect.setAttribute('y', safeY); 
+      rect.setAttribute('width', barW); 
+      rect.setAttribute('height', safeH);
+      rect.setAttribute('fill', opts.fill || '#3b82f6'); 
+      rect.setAttribute('rx', '4');
       svg.appendChild(rect);
 
+      const labelText = labels[i] ? String(labels[i]).slice(0, 8) : `Item ${i+1}`;
       const text = document.createElementNS(svg.namespaceURI, 'text');
-      text.setAttribute('x', x + barW / 2); text.setAttribute('y', height - 15);
-      text.setAttribute('text-anchor', 'middle'); text.setAttribute('font-size', '10'); text.setAttribute('fill', '#9ca3af');
-      text.textContent = labels[i].slice(0, 8);
+      text.setAttribute('x', x + barW / 2); 
+      text.setAttribute('y', height - 15);
+      text.setAttribute('text-anchor', 'middle'); 
+      text.setAttribute('font-size', '10'); 
+      text.setAttribute('fill', '#9ca3af');
+      text.textContent = labelText;
       svg.appendChild(text);
+      
+      // Add value label on top of bar
+      const valText = document.createElementNS(svg.namespaceURI, 'text');
+      valText.setAttribute('x', x + barW / 2);
+      valText.setAttribute('y', safeY - 5);
+      valText.setAttribute('text-anchor', 'middle');
+      valText.setAttribute('font-size', '9');
+      valText.setAttribute('font-weight', 'bold');
+      valText.setAttribute('fill', opts.fill || '#3b82f6');
+      valText.textContent = v;
+      svg.appendChild(valText);
     });
     container.appendChild(svg);
   }
@@ -84,11 +118,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function loadStudents() {
-    const res = await fetch('/api/admin/students');
-    const data = await res.json();
-    if (!data) return;
+    try {
+      const res = await fetch('/api/admin/students');
+      if (!res.ok) throw new Error('Failed to fetch students');
+      const data = await res.json();
+      
+      // Validation: Ensure data is an array
+      if (!Array.isArray(data)) {
+        console.error('Expected array of students, got:', data);
+        studentsTable.innerHTML = '<div class="text-center p-8 text-red-500 font-medium">Invalid data format received from server.</div>';
+        return;
+      }
 
-    studentCount.textContent = `${data.length} Student${data.length === 1 ? '' : 's'} Registered`;
+      studentCount.textContent = `${data.length} Student${data.length === 1 ? '' : 's'} Registered`;
 
     const table = document.createElement('table');
     table.className = 'w-full text-left border-collapse';
@@ -170,6 +212,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       };
     });
+    } catch (err) {
+      console.error('Error loading students:', err);
+      studentsTable.innerHTML = '<div class="text-center p-8 text-slate-400 font-medium italic">Error loading student directory.</div>';
+    }
   }
 
   async function loadStudentDetails(id) {
@@ -215,14 +261,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Analytics
   async function loadAnalytics() {
-    const deptRes = await fetch('/api/analytics/department_avg');
-    const deptJson = await deptRes.json();
-    renderBarChart('deptAvgChart', Object.keys(deptJson), Object.values(deptJson).map(v => v || 0));
+    const deptAvgChart = document.getElementById('deptAvgChart');
+    const failureRateChart = document.getElementById('failureRateChart');
+    
+    // Add loading states
+    if (deptAvgChart) deptAvgChart.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-xs animate-pulse">Syncing GWA metrics...</div>';
+    if (failureRateChart) failureRateChart.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-xs animate-pulse">Analyzing failure nodes...</div>';
 
-    const failRes = await fetch('/api/analytics/failure_rates');
-    const failJson = await failRes.json();
-    const subjs = Object.keys(failJson);
-    renderBarChart('failureRateChart', subjs, subjs.map(s => failJson[s].failure_rate || 0), { fill: '#f87171' });
+    try {
+      const deptRes = await fetch('/api/analytics/department_avg');
+      if (!deptRes.ok) throw new Error('Failed to load department averages');
+      const deptJson = await deptRes.json();
+      renderBarChart('deptAvgChart', Object.keys(deptJson), Object.values(deptJson).map(v => v || 0));
+    } catch (err) {
+      console.error('Error loading department avg:', err);
+      if (deptAvgChart) deptAvgChart.innerHTML = '<div class="flex items-center justify-center h-full text-red-400 text-xs">Analytics unavailable</div>';
+    }
+
+    try {
+      const failRes = await fetch('/api/analytics/failure_rates');
+      if (!failRes.ok) throw new Error('Failed to load failure rates');
+      const failJson = await failRes.json();
+      const subjs = Object.keys(failJson);
+      renderBarChart('failureRateChart', subjs, subjs.map(s => failJson[s] || 0), { fill: '#f87171' });
+    } catch (err) {
+      console.error('Error loading failure rates:', err);
+      if (failureRateChart) failureRateChart.innerHTML = '<div class="flex items-center justify-center h-full text-red-400 text-xs">Failure report failed</div>';
+    }
   }
 
   // Modal handlers

@@ -12,7 +12,9 @@ from datetime import datetime, timedelta
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app import app, engine, User, Department, Course, Admin, SubjectGrade, Post
+from app.main import app
+from app.database import engine
+from app.models import User, Department, Course, Admin, SubjectGrade, Post
 
 def generate_dummy_data():
     """Generate comprehensive dummy data for testing and analysis"""
@@ -109,6 +111,8 @@ def generate_dummy_data():
                     subject=subject,
                     units=units,
                     grade=grade,
+                    year=random.randint(1, 4),
+                    semester=random.randint(1, 2),
                     timestamp=timestamp
                 )
                 session.add(subject_grade)
@@ -155,7 +159,7 @@ def main():
     print("=" * 50)
     
     # Initialize database
-    from app import init_database
+    from app.main import init_database
     init_database()
     
     # Generate dummy data

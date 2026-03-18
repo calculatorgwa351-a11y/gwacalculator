@@ -1,16 +1,15 @@
 version: '3.8'
 
 services:
-  app:
+  web:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "5000:5000"
     environment:
-      - FLASK_DEBUG=false
+      - DEBUG=false
       - SECRET_KEY=your-secret-key-here
-      # Use SQLite for better performance
       - DB_RESET_ON_INIT=false
     volumes:
       - ./instance:/app/instance

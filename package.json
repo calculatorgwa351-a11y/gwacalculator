@@ -1,0 +1,30 @@
+{
+  "name": "gwacalculator",
+  "version": "1.0.0",
+  "description": "A modern Flask application for students to manage academic grades and share updates. Built with the Philippine GWA system in mind.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "build:css": "npx @tailwindcss/cli -i ./static/css/style.css -o ./static/css/main.css --watch",
+    "prod:css": "npx @tailwindcss/cli -i ./static/css/style.css -o ./static/css/main.css --minify",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/calculatorgwa351-a11y/gwacalculator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/calculatorgwa351-a11y/gwacalculator/issues"
+  },
+  "homepage": "https://github.com/calculatorgwa351-a11y/gwacalculator#readme",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.2",
+    "tailwindcss": "^4.2.2"
+  }
+}
