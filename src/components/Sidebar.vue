@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { useThemeStore } from '@/stores/theme'
+import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 
 const themeStore = useThemeStore()
+const authStore = useAuthStore()
 const router = useRouter()
 
 const logout = async () => {
-  try {
-    const res = await fetch('/api/logout', { method: 'POST' })
-    if (res.ok) {
-      router.push('/')
-    }
-  } catch (err) {
-    console.error('Logout failed:', err)
-  }
+  await authStore.logout()
+  router.push('/')
 }
 
 const emit = defineEmits(['view-change'])
@@ -67,6 +63,15 @@ const setView = (view: string) => {
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
           Handbook
         </button>
+
+        <router-link
+          v-if="authStore.isAdmin"
+          to="/admin"
+          class="sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h4m-6 6v2a2 2 0 002 2h6a2 2 0 002-2v-6a2 2 0 00-2-2h-1M9 17H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v2"/></svg>
+          Admin Console
+        </router-link>
       </nav>
     </div>
 

@@ -18,6 +18,22 @@ from app.crud import compute_gwa_for_user, analyze_latin_honors, get_global_anal
 
 router = APIRouter(prefix="/api")
 
+@router.get("/me")
+async def get_me(request: Request, db: Session = Depends(get_db)):
+    """Return the currently authenticated user (derived from JWT cookie)."""
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    return {
+        "id": user.id,
+        "school_id": user.school_id,
+        "name": user.name,
+        "department": user.department,
+        "course": user.course,
+        "is_admin": is_admin(user, db)
+    }
+
 @router.post("/login")
 async def api_login(request: Request, db: Session = Depends(get_db)):
     """AJAX/API login endpoint - always returns JSON"""
@@ -239,7 +255,7 @@ async def get_students(request: Request, page: int = 1, limit: int = 20, db: Ses
         raise HTTPException(status_code=403, detail="Admin access required")
     
     offset = (page - 1) * limit
-    students = db.query(User).offset(offset).limit(limit).all()
+    students = db.query(User).filter(User.school_id != 'admin').offset(offset).limit(limit).all()
     
     result = []
     for u in students:

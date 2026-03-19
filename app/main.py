@@ -61,38 +61,44 @@ def init_database():
                     db.commit()
                     print(f"✅ Created course: {course_name} in {dept.name}")
         
-        # Create admin user
+        # Create admin user (and ensure admin rights exist)
         admin_user = db.query(User).filter(User.school_id == 'admin').first()
         if not admin_user:
-            admin_user = User(school_id='admin', name='Administrator', department='COTE', course='Administration')
+            admin_user = User(
+                school_id='admin',
+                name='Administrator',
+                department='COTE',
+                course='Administration'
+            )
             admin_user.set_password('adminpass')
             db.add(admin_user)
             db.commit()
             print("✅ Created admin user: admin / adminpass")
-            
-            # Grant admin rights
+
+        admin_record = db.query(Admin).filter(Admin.user_id == admin_user.id).first()
+        if not admin_record:
             admin_record = Admin(user_id=admin_user.id)
             db.add(admin_record)
             db.commit()
             print("✅ Granted admin rights")
+
+        # Check if any students exist
+        student_count = db.query(User).filter(User.school_id != 'admin').count()
+        if student_count == 0:
+            print("⚠️ No students found. Triggering dummy data generation...")
+            try:
+                from init import generate_dummy_data
+                generate_dummy_data()
+            except Exception as e:
+                print(f"❌ Failed to generate dummy data: {e}")
         else:
-            # Check if any students exist
-            student_count = db.query(User).filter(User.school_id != 'admin').count()
-            if student_count == 0:
-                print("⚠️ No students found. Triggering dummy data generation...")
-                try:
-                    from init import generate_dummy_data
-                    generate_dummy_data()
-                except Exception as e:
-                    print(f"❌ Failed to generate dummy data: {e}")
-            else:
-                # FORCE RESET all users on startup for testing/recovery
-                users = db.query(User).all()
-                for u in users:
-                    p = 'adminpass' if u.school_id == 'admin' else 'password123'
-                    u.set_password(p)
-                db.commit()
-                print(f"✅ Verified and reset passwords for {len(users)} users")
+            # FORCE RESET all users on startup for testing/recovery
+            users = db.query(User).all()
+            for u in users:
+                p = 'adminpass' if u.school_id == 'admin' else 'password123'
+                u.set_password(p)
+            db.commit()
+            print(f"✅ Verified and reset passwords for {len(users)} users")
         
         print("🗄️ FastAPI database initialization complete!")
         

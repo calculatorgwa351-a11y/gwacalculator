@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import Sidebar from '@/components/Sidebar.vue'
+import AdminSidebar from '@/components/AdminSidebar.vue'
 import StudentEditModal from '@/components/StudentEditModal.vue'
 import type { User, Analytics } from '@/types'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
 const students = ref<User[]>([])
 const analytics = ref<Analytics | null>(null)
@@ -10,10 +12,22 @@ const isLoading = ref(true)
 const searchTerm = ref('')
 const isModalOpen = ref(false)
 const selectedUser = ref<User | null>(null)
+const authStore = useAuthStore()
+const router = useRouter()
 
 const fetchAdminData = async () => {
   isLoading.value = true
   try {
+    if (!authStore.hydrated) await authStore.fetchMe()
+    if (!authStore.user) {
+      router.push('/')
+      return
+    }
+    if (!authStore.isAdmin) {
+      router.push('/dashboard')
+      return
+    }
+
     const studentsRes = await fetch('/api/admin/students')
     const analyticsRes = await fetch('/api/analytics')
     
@@ -92,7 +106,7 @@ onMounted(() => {
 
 <template>
   <div class="flex min-h-screen">
-    <Sidebar active-view="overview" />
+    <AdminSidebar />
 
     <main class="flex-1 p-8 overflow-y-auto">
       <header class="flex items-center justify-between mb-8">

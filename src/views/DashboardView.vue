@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import Sidebar from '@/components/Sidebar.vue'
 import GwaChart from '@/components/GwaChart.vue'
 import PostList from '@/components/PostList.vue'
 import GradeList from '@/components/GradeList.vue'
 import Handbook from '@/components/Handbook.vue'
-import type { User } from '@/types'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
-const user = ref<User | null>(null)
+const authStore = useAuthStore()
+const router = useRouter()
+const user = computed(() => authStore.user)
 const activeView = ref('overview')
 const gwa = ref(0)
 const honors = ref<any>(null)
@@ -16,14 +19,20 @@ const newPostContent = ref('')
 
 const fetchDashboardData = async () => {
   try {
+    if (!authStore.hydrated) await authStore.fetchMe()
+    if (!authStore.user) {
+      router.push('/')
+      return
+    }
+
     const res = await fetch('/api/grades')
+    if (res.status === 401) {
+      await authStore.fetchMe()
+      router.push('/')
+      return
+    }
     if (res.ok) {
-      const grades = await res.json()
-      // Simplified user fetch for this example
-      // In a real app, you'd have a useAuthStore
-      const userRes = await fetch('/api/debug/students')
-      const students = await userRes.json()
-      user.value = students[0] // Just for demo
+      await res.json()
     }
   } catch (err) {
     console.error('Failed to fetch dashboard data:', err)
