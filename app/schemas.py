@@ -9,6 +9,13 @@ class UserCreate(BaseModel):
     department: Optional[str] = None
     course: Optional[str] = None
 
+class UserUpdate(BaseModel):
+    school_id: Optional[str] = None
+    name: Optional[str] = None
+    password: Optional[str] = None
+    department: Optional[str] = None
+    course: Optional[str] = None
+
 class UserResponse(BaseModel):
     id: int
     school_id: str

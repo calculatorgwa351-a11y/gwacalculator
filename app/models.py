@@ -2,8 +2,10 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Tex
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+from passlib.context import CryptContext
 from app.database import Base
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class User(Base):
     __tablename__ = 'user'
@@ -19,10 +21,26 @@ class User(Base):
     grades = relationship("SubjectGrade", back_populates="student", cascade="all, delete-orphan")
     
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = pwd_context.hash(password)
     
     def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        if not self.password_hash:
+            return False
+            
+        # Werkzeug hashes usually start with pbkdf2:
+        if self.password_hash.startswith('pbkdf2:sha256:'):
+            from werkzeug.security import check_password_hash
+            return check_password_hash(self.password_hash, password)
+            
+        try:
+            return pwd_context.verify(password, self.password_hash)
+        except Exception:
+            # Last resort fallback
+            try:
+                from werkzeug.security import check_password_hash
+                return check_password_hash(self.password_hash, password)
+            except:
+                return False
 
 class Department(Base):
     __tablename__ = 'department'

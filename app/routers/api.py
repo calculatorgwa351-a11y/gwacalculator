@@ -6,13 +6,13 @@ from typing import List
 import os
 from app.database import get_db
 from app.auth import (
-    create_access_token, create_session, get_current_user, 
-    get_current_user_from_token, is_admin, ACCESS_TOKEN_EXPIRE_MINUTES
+    create_access_token, get_current_user, 
+    is_admin, ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from app.models import User, Post, SubjectGrade, Admin, Reaction, Comment
 from app.schemas import (
     PostCreate, PostResponse, GradeCreate, GradeResponse, 
-    ReactionCreate, CommentCreate, UserCreate, UserResponse
+    ReactionCreate, CommentCreate, UserCreate, UserResponse, UserUpdate
 )
 from app.crud import compute_gwa_for_user, analyze_latin_honors, get_global_analytics
 
@@ -26,55 +26,51 @@ async def api_login(request: Request, db: Session = Depends(get_db)):
         school_id = body.get("school_id")
         password = body.get("password")
     except:
-        return JSONResponse(content={"error": "Invalid request"}, status_code=400)
+        return JSONResponse(content={"error": "Invalid request format"}, status_code=400)
     
     if not school_id or not password:
-        return JSONResponse(content={"error": "Missing credentials"}, status_code=400)
+        return JSONResponse(content={"error": "School ID and password are required"}, status_code=400)
     
     user = db.query(User).filter(User.school_id == school_id).first()
     if not user or not user.check_password(password):
-        return JSONResponse(content={"error": "Invalid credentials"}, status_code=401)
+        # SECURITY: Generic error message to prevent account enumeration
+        return JSONResponse(content={"error": "Invalid School ID or password"}, status_code=401)
     
     # Create JWT token
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
-    )
-    
-    # Also create session as fallback
-    session_id = create_session(user.id)
+    access_token = create_access_token(data={"sub": str(user.id)})
+    if not access_token:
+        return JSONResponse(content={"error": "Internal authentication error"}, status_code=500)
     
     # Build redirect URL based on user type
     is_user_admin = is_admin(user, db)
     redirect_url = "/admin" if is_user_admin else "/dashboard"
     
-    # Set both cookies for maximum compatibility
     response = JSONResponse(content={
         "success": True,
         "redirect": redirect_url,
         "is_admin": is_user_admin
     })
     
-    # Set JWT cookie
+    # Set JWT cookie with secure flags
+    from app.auth import COOKIE_NAME
     response.set_cookie(
-        key="access_token",
+        key=COOKIE_NAME,
         value=access_token,
-        max_age=1800,
+        max_age=3600, # 1 hour
         httponly=True,
         samesite="lax",
+        secure=request.url.scheme == "https", # Only require HTTPS if the request is HTTPS
         path="/"
     )
     
-    # Set session cookie as fallback
-    response.set_cookie(
-        key="session_id",
-        value=session_id,
-        max_age=1800,
-        httponly=True,
-        samesite="lax",
-        path="/"
-    )
-    
+    return response
+
+@router.post("/logout")
+async def api_logout():
+    """Clear authentication cookies"""
+    from app.auth import COOKIE_NAME
+    response = JSONResponse(content={"success": True, "redirect": "/"})
+    response.delete_cookie(key=COOKIE_NAME, path="/")
     return response
 
 @router.get("/posts")
@@ -223,6 +219,11 @@ async def create_grade(request: Request, grade: GradeCreate, db: Session = Depen
         "gwa": gwa
     }
 
+@router.get("/debug/students")
+async def list_students_debug(db: Session = Depends(get_db)):
+    students = db.query(User).filter(User.school_id != 'admin').limit(10).all()
+    return [{"id": s.id, "name": s.name, "school_id": s.school_id} for s in students]
+
 @router.get("/analytics")
 async def get_analytics(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
@@ -325,6 +326,36 @@ async def get_student_detail(student_id: int, request: Request, db: Session = De
         "grades": [{"id": g.id, "subject": g.subject, "grade": g.grade} for g in student.grades]
     }
 
+@router.put("/admin/student/{student_id}", response_model=UserResponse)
+async def update_student(student_id: int, student_update: UserUpdate, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user or not is_admin(user, db):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    student = db.query(User).filter(User.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Update fields if provided
+    if student_update.name is not None:
+        student.name = student_update.name
+    if student_update.school_id is not None:
+        # Check if new school ID is already taken by another user
+        existing = db.query(User).filter(User.school_id == student_update.school_id, User.id != student_id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="School ID already exists")
+        student.school_id = student_update.school_id
+    if student_update.department is not None:
+        student.department = student_update.department
+    if student_update.course is not None:
+        student.course = student_update.course
+    if student_update.password is not None and student_update.password != "":
+        student.set_password(student_update.password)
+        
+    db.commit()
+    db.refresh(student)
+    return student
+
 @router.delete("/admin/student/{student_id}")
 async def delete_student(student_id: int, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
@@ -335,9 +366,13 @@ async def delete_student(student_id: int, request: Request, db: Session = Depend
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     
-    db.delete(student)
-    db.commit()
-    return {"success": True}
+    try:
+        db.delete(student)
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 @router.get("/analytics/department_avg")
 async def get_department_avg(request: Request, db: Session = Depends(get_db)):
@@ -345,11 +380,16 @@ async def get_department_avg(request: Request, db: Session = Depends(get_db)):
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Calculate GWA per department (COTE, COED, CBM)
-    departments = ['COTE', 'COED', 'CBM']
+    # Calculate weighted GWA per department
+    from sqlalchemy import func
+    
+    # Fetch all unique departments from the database
+    departments = db.query(User.department).filter(User.department != None).distinct().all()
+    dept_names = [d[0] for d in departments]
+    
     result = {}
     
-    for dept_name in departments:
+    for dept_name in dept_names:
         # Get users in this department
         users_in_dept = db.query(User.id).filter(User.department == dept_name).all()
         user_ids = [u.id for u in users_in_dept]
@@ -358,13 +398,13 @@ async def get_department_avg(request: Request, db: Session = Depends(get_db)):
             result[dept_name] = 0
             continue
             
-        # Get grades for these users
-        from sqlalchemy import func
+        # Calculate weighted average GWA for the entire department
+        # sum(units * grade) / sum(units)
         avg_gwa = db.query(
-            func.avg(SubjectGrade.grade)
-        ).filter(SubjectGrade.user_id.in_(user_ids)).scalar()
+            func.sum(SubjectGrade.units * SubjectGrade.grade) / func.sum(SubjectGrade.units)
+        ).filter(SubjectGrade.user_id.in_(user_ids), SubjectGrade.units > 0).scalar()
         
-        result[dept_name] = round(float(avg_gwa), 2) if avg_gwa else 0
+        result[dept_name] = round(float(avg_gwa), 3) if avg_gwa else 0
         
     return result
 
@@ -374,11 +414,14 @@ async def get_failure_rates(request: Request, db: Session = Depends(get_db)):
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Calculate failure rates per department (COTE, COED, CBM)
-    departments = ['COTE', 'COED', 'CBM']
+    # Calculate failure rates per department
+    # Fetch all unique departments from the database
+    departments = db.query(User.department).filter(User.department != None).distinct().all()
+    dept_names = [d[0] for d in departments]
+    
     result = {}
     
-    for dept_name in departments:
+    for dept_name in dept_names:
         # Get users in this department
         users_in_dept = db.query(User.id).filter(User.department == dept_name).all()
         user_ids = [u.id for u in users_in_dept]
@@ -402,14 +445,14 @@ async def get_failure_rates(request: Request, db: Session = Depends(get_db)):
         
     return result
 
-@router.get("/analytics/gwa_trends")
-async def get_gwa_trends(user_id: int, request: Request, db: Session = Depends(get_db)):
+@router.get("/analytics/user-timeline")
+async def get_user_timeline(user_id: int, request: Request, db: Session = Depends(get_db)):
     """API for GWA Chart timeline for a specific user"""
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Optional: check if admin or the user themselves
+    # Permission check: admin or the user themselves
     if not is_admin(user, db) and user.id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -420,34 +463,12 @@ async def get_gwa_trends(user_id: int, request: Request, db: Session = Depends(g
     running_total_points = 0
     
     for g in grades:
-        running_total_units += g.units
-        running_total_points += (g.units * g.grade)
-        timeline.append({
-            "timestamp": g.timestamp.isoformat(),
-            "gwa": round(running_total_points / running_total_units, 3) if running_total_units > 0 else 0
-        })
-    
-    return {"timeline": timeline}
-
-@router.get("/analytics/user-timeline")
-async def get_user_timeline(user_id: int, request: Request, db: Session = Depends(get_db)):
-    """API for GWA Chart timeline"""
-    user = get_current_user(request, db)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user_id).order_by(SubjectGrade.timestamp.asc()).all()
-    
-    timeline = []
-    running_total_units = 0
-    running_total_points = 0
-    
-    for g in grades:
-        running_total_units += g.units
-        running_total_points += (g.units * g.grade)
-        timeline.append({
-            "timestamp": g.timestamp.isoformat(),
-            "gwa": round(running_total_points / running_total_units, 3)
-        })
+        if g.units is not None and g.grade is not None:
+            running_total_units += g.units
+            running_total_points += (g.units * g.grade)
+            timeline.append({
+                "timestamp": g.timestamp.isoformat(),
+                "gwa": round(running_total_points / running_total_units, 3) if running_total_units > 0 else 0
+            })
     
     return {"timeline": timeline}

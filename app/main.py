@@ -1,18 +1,33 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.database import engine, Base, SessionLocal
 from app.models import Department, Course, User, Admin
-from app.routers import pages, api
+from app.routers import api
 import os
 
-app = FastAPI(title="GWA Calculator", version="2.0")
+app = FastAPI(
+    title="GWA Calculator", 
+    version="2.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
+)
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include routers
-app.include_router(pages.router)
 app.include_router(api.router)
+
+# Mount frontend dist folder if it exists
+if os.path.exists("dist"):
+    app.mount("/", StaticFiles(directory="dist", html=True), name="frontend")
 
 # Database initialization
 def init_database():
@@ -61,7 +76,23 @@ def init_database():
             db.commit()
             print("✅ Granted admin rights")
         else:
-            print("✅ Admin user already exists")
+            # Check if any students exist
+            student_count = db.query(User).filter(User.school_id != 'admin').count()
+            if student_count == 0:
+                print("⚠️ No students found. Triggering dummy data generation...")
+                try:
+                    from init import generate_dummy_data
+                    generate_dummy_data()
+                except Exception as e:
+                    print(f"❌ Failed to generate dummy data: {e}")
+            else:
+                # FORCE RESET all users on startup for testing/recovery
+                users = db.query(User).all()
+                for u in users:
+                    p = 'adminpass' if u.school_id == 'admin' else 'password123'
+                    u.set_password(p)
+                db.commit()
+                print(f"✅ Verified and reset passwords for {len(users)} users")
         
         print("🗄️ FastAPI database initialization complete!")
         

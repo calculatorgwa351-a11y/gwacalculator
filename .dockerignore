@@ -45,3 +45,15 @@ logs/
 # Documentation
 README_DOCKER.md
 docker-compose.*.yml
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+.npm
+.cache
+cypress/videos
+cypress/screenshots
+.nyc_output
+.vitest-results
