@@ -102,12 +102,12 @@ def init_database():
         # Check if any students exist
         student_count = db.query(User).filter(User.school_id != 'admin').count()
         if student_count == 0:
-                print("⚠️ No students found. Triggering dummy data generation...")
-                try:
-                    from init import generate_dummy_data
-                    generate_dummy_data(db)
-                except Exception as e:
-                    print(f"❌ Failed to generate dummy data: {e}")
+            print("⚠️ No students found. Triggering dummy data generation...")
+            try:
+                from init import generate_dummy_data
+                generate_dummy_data(db)
+            except Exception as e:
+                print(f"❌ Failed to generate dummy data: {e}")
         else:
             # FORCE RESET all users on startup for testing/recovery
             users = db.query(User).all()
@@ -117,6 +117,13 @@ def init_database():
             db.commit()
             print(f"✅ Verified and reset passwords for {len(users)} users")
         
+        # Ensure students always have some grades (for dashboards/analytics)
+        try:
+            from init import ensure_grades_for_all_students
+            ensure_grades_for_all_students(db, min_subjects=8)
+        except Exception as e:
+            print(f"?? Failed to seed student grades: {e}")
+
         print("🗄️ FastAPI database initialization complete!")
         
     except Exception as e:

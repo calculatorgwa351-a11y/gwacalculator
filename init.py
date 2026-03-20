@@ -16,6 +16,57 @@ from app.database import SessionLocal
 from app.models import User, SubjectGrade, Post
 
 
+DEFAULT_SUBJECTS = [
+    "Data Structures and Algorithms",
+    "Database Systems",
+    "Operating Systems",
+    "Computer Organization",
+    "Software Engineering",
+    "Web Development",
+    "Artificial Intelligence",
+    "Network Security"
+]
+
+
+def ensure_grades_for_all_students(db, *, min_subjects: int = 8) -> int:
+    """
+    Ensure every non-admin student has at least `min_subjects` SubjectGrade rows.
+    Returns the number of grades inserted.
+    """
+    inserted = 0
+    students = db.query(User).filter(User.school_id != "admin").all()
+    if not students:
+        return 0
+
+    for s in students:
+        existing_count = db.query(SubjectGrade).filter(SubjectGrade.user_id == s.id).count()
+        needed = max(0, min_subjects - existing_count)
+        if needed == 0:
+            continue
+
+        # Make subject names unique per student to avoid duplicate UI rows.
+        for i in range(needed):
+            subject = DEFAULT_SUBJECTS[(existing_count + i) % len(DEFAULT_SUBJECTS)]
+            subject_name = subject if existing_count + i < len(DEFAULT_SUBJECTS) else f"{subject} ({existing_count + i + 1})"
+            grade = round(random.uniform(1.0, 3.0), 2)
+            db.add(
+                SubjectGrade(
+                    user_id=s.id,
+                    subject=subject_name,
+                    units=3.0,
+                    grade=grade,
+                    year=random.choice([1, 2, 3, 4]),
+                    semester=random.choice([1, 2])
+                )
+            )
+            inserted += 1
+
+    if inserted:
+        db.commit()
+        print(f"✅ Seeded {inserted} grades across students")
+    return inserted
+
+
 def generate_dummy_data(db=None, *, student_count: int = 12) -> None:
     """
     Seed a small set of students with grades and a few posts.
@@ -43,17 +94,6 @@ def generate_dummy_data(db=None, *, student_count: int = 12) -> None:
             "CBM": ["Business Administration", "Accountancy"]
         }
 
-        default_subjects = [
-            "Data Structures and Algorithms",
-            "Database Systems",
-            "Operating Systems",
-            "Computer Organization",
-            "Software Engineering",
-            "Web Development",
-            "Artificial Intelligence",
-            "Network Security"
-        ]
-
         students: list[User] = []
         base_id = 20240001
         for i in range(student_count):
@@ -75,7 +115,7 @@ def generate_dummy_data(db=None, *, student_count: int = 12) -> None:
 
         # Grades
         for s in students:
-            for subject in default_subjects:
+            for subject in DEFAULT_SUBJECTS:
                 grade = round(random.uniform(1.0, 3.0), 2)
                 db.add(
                     SubjectGrade(
@@ -102,4 +142,3 @@ def generate_dummy_data(db=None, *, student_count: int = 12) -> None:
     finally:
         if close_db:
             db.close()
-

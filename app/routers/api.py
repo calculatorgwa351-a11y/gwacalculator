@@ -387,7 +387,16 @@ async def get_student_detail(student_id: int, request: Request, db: Session = De
         "department": student.department,
         "gwa": gwa,
         "posts": [{"id": p.id, "content": p.content} for p in student.posts],
-        "grades": [{"id": g.id, "subject": g.subject, "grade": g.grade} for g in student.grades]
+        "grades": [{
+            "id": g.id,
+            "subject": g.subject,
+            "units": g.units,
+            "grade": g.grade,
+            "year": g.year,
+            "semester": g.semester,
+            "timestamp": g.timestamp.isoformat() if g.timestamp else None,
+            "failed": g.is_failed()
+        } for g in student.grades]
     }
 
 @router.put("/admin/student/{student_id}", response_model=UserResponse)
@@ -508,6 +517,39 @@ async def get_failure_rates(request: Request, db: Session = Depends(get_db)):
         result[dept_name] = round((failed_grades / total_grades) * 100, 1)
         
     return result
+
+@router.get("/analytics/grade_distribution")
+async def get_grade_distribution(request: Request, db: Session = Depends(get_db)):
+    """Admin-only grade distribution (histogram) across all students."""
+    user = get_current_user(request, db)
+    if not user or not is_admin(user, db):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Exclude the admin user from analysis.
+    student_ids = [u.id for u in db.query(User.id).filter(User.school_id != 'admin').all()]
+    if not student_ids:
+        return {"buckets": [], "total": 0}
+
+    grades = db.query(SubjectGrade.grade).filter(SubjectGrade.user_id.in_(student_ids)).all()
+    values = [g[0] for g in grades if g[0] is not None]
+
+    buckets = [
+        {"label": "1.00-1.25", "min": 1.0, "max": 1.25, "count": 0},
+        {"label": "1.26-1.50", "min": 1.26, "max": 1.50, "count": 0},
+        {"label": "1.51-1.75", "min": 1.51, "max": 1.75, "count": 0},
+        {"label": "1.76-2.00", "min": 1.76, "max": 2.00, "count": 0},
+        {"label": "2.01-2.50", "min": 2.01, "max": 2.50, "count": 0},
+        {"label": "2.51-3.00", "min": 2.51, "max": 3.00, "count": 0},
+        {"label": "3.01-5.00", "min": 3.01, "max": 5.00, "count": 0}
+    ]
+
+    for v in values:
+        for b in buckets:
+            if b["min"] <= v <= b["max"]:
+                b["count"] += 1
+                break
+
+    return {"buckets": [{"label": b["label"], "count": b["count"]} for b in buckets], "total": len(values)}
 
 @router.get("/analytics/user-timeline")
 async def get_user_timeline(user_id: int, request: Request, db: Session = Depends(get_db)):

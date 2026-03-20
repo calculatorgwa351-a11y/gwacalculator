@@ -12,3 +12,11 @@ command = '''
 python -m app.main
 npm run dev
 '''
+
+[[actions]]
+name = "run it"
+icon = "run"
+command = '''
+docker compose down
+docker compose up --build
+'''

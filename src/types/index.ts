@@ -64,6 +64,27 @@ export interface DashboardSummary {
   post_count: number
 }
 
+export interface LabeledCount {
+  label: string
+  count: number
+}
+
+export interface GradeDistribution {
+  buckets: LabeledCount[]
+  total: number
+}
+
+export interface AdminStudentDetail {
+  id: number
+  name: string
+  school_id: string
+  course?: string
+  department?: string
+  gwa: number | null
+  posts: { id: number; content: string }[]
+  grades: SubjectGrade[]
+}
+
 export interface ThemeState {
   isDark: boolean
 }
