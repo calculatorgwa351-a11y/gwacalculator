@@ -171,12 +171,14 @@ def init_database():
                 logger.info("Granted admin rights to %s", admin_school_id)
 
         student_count = db.query(User).filter(User.school_id != admin_school_id).count()
-        if settings.seed_demo_data and student_count == 0:
-            logger.info("No students found; generating demo seed data.")
+        if settings.seed_demo_data:
             try:
                 from init import generate_dummy_data
 
-                generate_dummy_data(db)
+                seed_result = generate_dummy_data(db, student_count=12, add_if_existing=True)
+                created_students = int(seed_result.get("created_students", 0))
+                if created_students > 0:
+                    logger.info("Generated %s demo students.", created_students)
             except Exception:
                 logger.exception("Failed to generate dummy data")
         elif student_count == 0:

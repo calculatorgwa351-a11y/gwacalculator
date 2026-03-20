@@ -988,6 +988,43 @@ async def seed_filipino_names(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to seed names: {e}")
 
+@router.post("/admin/seed/demo_data")
+async def seed_demo_data(
+    request: Request,
+    student_count: int = Query(default=12, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """Admin-only: add missing demo students/data without deleting existing users."""
+    user = get_current_user(request, db)
+    if not user or not is_admin(user, db):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    try:
+        from init import (
+            assign_filipino_names_to_students,
+            ensure_grades_for_all_students,
+            generate_dummy_data,
+        )
+
+        seed_result = generate_dummy_data(db, student_count=student_count, add_if_existing=True)
+        seeded_grades = ensure_grades_for_all_students(db, min_subjects=8)
+        renamed_students = assign_filipino_names_to_students(db, school_id_prefix="2024")
+
+        _invalidate_analytics_caches()
+        result = {
+            "created_students": int(seed_result.get("created_students", 0)),
+            "existing_students": int(seed_result.get("existing_students", 0)),
+            "seeded_grades": int(seed_result.get("seeded_grades", 0)) + seeded_grades,
+            "seeded_posts": int(seed_result.get("seeded_posts", 0)),
+            "seeded_comments": int(seed_result.get("seeded_comments", 0)),
+            "renamed_students": renamed_students,
+            "skipped_existing_demo": int(seed_result.get("skipped_existing_demo", 0)),
+        }
+        _log_admin_action(db, user, action="seed_demo_data", meta=result)
+        return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to seed demo data: {e}")
+
 @router.post("/admin/student/{student_id}/reset_password")
 async def admin_reset_student_password(student_id: int, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
