@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
+from sqlalchemy import inspect, text
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
@@ -211,8 +212,26 @@ def init_database():
         db.close()
 
 
+def run_lightweight_migrations():
+    """
+    Apply small, safe schema fixes for existing databases without full Alembic.
+    """
+    try:
+        inspector = inspect(engine)
+        table_names = set(inspector.get_table_names())
+        if "comment" in table_names:
+            comment_cols = {col["name"] for col in inspector.get_columns("comment")}
+            if "parent_comment_id" not in comment_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE comment ADD COLUMN parent_comment_id INTEGER"))
+                logger.info("Applied migration: added comment.parent_comment_id")
+    except Exception:
+        logger.exception("Lightweight migration step failed")
+
+
 @app.on_event("startup")
 async def startup_event():
+    run_lightweight_migrations()
     if settings.init_db_on_startup:
         try:
             init_database()
