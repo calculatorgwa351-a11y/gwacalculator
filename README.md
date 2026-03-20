@@ -29,6 +29,10 @@ FastAPI + Vue 3 application for grade tracking, GWA computation, student feed, a
 4. Verify health:
    - `http://localhost:5000/api/health`
 
+## Render Deploy
+- This repo is configured for Render with `gunicorn app:app` and `gunicorn.conf.py`.
+- Gunicorn uses `uvicorn.workers.UvicornWorker` from config, so FastAPI runs correctly.
+
 ## Default Demo Credentials
 - Admin: `admin / adminpass` (development/demo only)
 - Seeded students: `2024xxxx / password123`
