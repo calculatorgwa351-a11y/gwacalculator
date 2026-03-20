@@ -1003,11 +1003,13 @@ async def seed_demo_data(
         from init import (
             assign_filipino_names_to_students,
             ensure_grades_for_all_students,
+            ensure_posts_for_all_students,
             generate_dummy_data,
         )
 
         seed_result = generate_dummy_data(db, student_count=student_count, add_if_existing=True)
         seeded_grades = ensure_grades_for_all_students(db, min_subjects=8)
+        post_result = ensure_posts_for_all_students(db, min_posts=1)
         renamed_students = assign_filipino_names_to_students(db, school_id_prefix="2024")
 
         _invalidate_analytics_caches()
@@ -1015,8 +1017,8 @@ async def seed_demo_data(
             "created_students": int(seed_result.get("created_students", 0)),
             "existing_students": int(seed_result.get("existing_students", 0)),
             "seeded_grades": int(seed_result.get("seeded_grades", 0)) + seeded_grades,
-            "seeded_posts": int(seed_result.get("seeded_posts", 0)),
-            "seeded_comments": int(seed_result.get("seeded_comments", 0)),
+            "seeded_posts": int(seed_result.get("seeded_posts", 0)) + int(post_result.get("seeded_posts", 0)),
+            "seeded_comments": int(seed_result.get("seeded_comments", 0)) + int(post_result.get("seeded_comments", 0)),
             "renamed_students": renamed_students,
             "skipped_existing_demo": int(seed_result.get("skipped_existing_demo", 0)),
         }

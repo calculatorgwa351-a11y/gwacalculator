@@ -168,6 +168,47 @@ def ensure_grades_for_all_students(db, *, min_subjects: int = 8) -> int:
     return inserted
 
 
+def ensure_posts_for_all_students(db, *, min_posts: int = 1) -> dict:
+    seeded_posts = 0
+    seeded_comments = 0
+    students = db.query(User).filter(User.school_id != "admin").all()
+    if not students:
+        return {"seeded_posts": 0, "seeded_comments": 0}
+
+    try:
+        fake = Faker("en_PH")
+    except Exception:
+        fake = Faker()
+
+    for student in students:
+        existing_posts = db.query(Post).filter(Post.user_id == student.id).count()
+        needed_posts = max(0, min_posts - existing_posts)
+        if needed_posts == 0:
+            continue
+
+        for _ in range(needed_posts):
+            post = Post(user_id=student.id, content=fake.sentence(nb_words=14))
+            db.add(post)
+            db.flush()
+            seeded_posts += 1
+
+            possible_commenters = [s for s in students if s.id != student.id]
+            if not possible_commenters:
+                continue
+
+            sample_size = min(2, len(possible_commenters))
+            for commenter in random.sample(possible_commenters, k=sample_size):
+                comment = Comment(post_id=post.id, user_id=commenter.id, content=fake.sentence(nb_words=8))
+                db.add(comment)
+                seeded_comments += 1
+
+    if seeded_posts or seeded_comments:
+        db.commit()
+        print(f"Seeded {seeded_posts} posts and {seeded_comments} comments across students")
+
+    return {"seeded_posts": seeded_posts, "seeded_comments": seeded_comments}
+
+
 def generate_dummy_data(
     db=None,
     *,

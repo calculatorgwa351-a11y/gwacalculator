@@ -18,6 +18,9 @@ const summary = ref<DashboardSummary | null>(null)
 const postsRefreshKey = ref(0)
 
 const newPostContent = ref('')
+const isPosting = ref(false)
+const postError = ref('')
+const canPost = computed(() => newPostContent.value.trim().length > 0 && !isPosting.value)
 
 const fetchDashboardData = async () => {
   try {
@@ -46,21 +49,39 @@ const setView = (view: string) => {
 }
 
 const handleCreatePost = async () => {
-  if (!newPostContent.value) return
+  const content = newPostContent.value.trim()
+  if (!content) {
+    postError.value = 'Post cannot be empty.'
+    return
+  }
 
+  isPosting.value = true
+  postError.value = ''
   try {
     const res = await apiFetch('/api/posts', {
       method: 'POST',
-      json: { content: newPostContent.value }
+      json: { content }
     })
 
     if (res.ok) {
       newPostContent.value = ''
       postsRefreshKey.value += 1
       await fetchDashboardData()
+    } else {
+      let message = 'Failed to create post.'
+      try {
+        const data = await res.json()
+        message = data?.detail || data?.error || message
+      } catch {
+        // no-op
+      }
+      postError.value = message
     }
   } catch (err) {
     console.error('Failed to create post:', err)
+    postError.value = 'Could not post right now. Please try again.'
+  } finally {
+    isPosting.value = false
   }
 }
 
@@ -252,9 +273,14 @@ const achievements = computed(() => {
       <div v-show="activeView === 'social'">
         <div class="mb-8">
           <form @submit.prevent="handleCreatePost" class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+            <div v-if="postError" class="mb-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold">
+              {{ postError }}
+            </div>
             <textarea v-model="newPostContent" placeholder="What's on your mind?" class="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none transition-all font-medium dark:text-white"></textarea>
             <div class="flex justify-end mt-4">
-              <button type="submit" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all">Post</button>
+              <button type="submit" :disabled="!canPost" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                {{ isPosting ? 'Posting...' : 'Post' }}
+              </button>
             </div>
           </form>
         </div>

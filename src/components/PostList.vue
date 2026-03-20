@@ -5,6 +5,7 @@ import { apiFetch } from '@/utils/apiClient'
 
 const posts = ref<Post[]>([])
 const isLoading = ref(true)
+const loadError = ref('')
 const commentDraft = ref<Record<number, string>>({})
 const replyTo = ref<Record<number, Comment | null>>({})
 const editPostId = ref<number | null>(null)
@@ -47,6 +48,7 @@ const buildThread = (comments: Comment[]) => {
 
 const fetchPosts = async () => {
   isLoading.value = true
+  loadError.value = ''
   try {
     const params = new URLSearchParams()
     params.set('page', String(page.value))
@@ -60,9 +62,19 @@ const fetchPosts = async () => {
       const data = (await res.json()) as PostsFeedResponse
       posts.value = data.items || []
       total.value = data.total || 0
+    } else {
+      let message = 'Failed to load posts.'
+      try {
+        const data = await res.json()
+        message = data?.detail || data?.error || message
+      } catch {
+        // no-op
+      }
+      loadError.value = message
     }
   } catch (err) {
     console.error('Failed to fetch posts:', err)
+    loadError.value = 'Could not load the feed right now.'
   } finally {
     isLoading.value = false
   }
@@ -218,6 +230,10 @@ onMounted(() => {
         <div class="h-4 bg-slate-50 dark:bg-slate-700 rounded w-full mb-2"></div>
         <div class="h-4 bg-slate-50 dark:bg-slate-700 rounded w-3/4"></div>
       </div>
+    </div>
+
+    <div v-else-if="loadError" class="p-4 rounded-2xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold">
+      {{ loadError }}
     </div>
 
     <div v-else-if="posts.length === 0" class="text-center p-12 text-slate-400 dark:text-slate-500 italic">

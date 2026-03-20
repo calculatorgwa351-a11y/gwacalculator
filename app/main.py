@@ -195,11 +195,12 @@ def init_database():
 
         if settings.seed_demo_data:
             try:
-                from init import ensure_grades_for_all_students
+                from init import ensure_grades_for_all_students, ensure_posts_for_all_students
 
                 ensure_grades_for_all_students(db, min_subjects=8)
+                ensure_posts_for_all_students(db, min_posts=1)
             except Exception:
-                logger.exception("Failed to ensure demo grades for students")
+                logger.exception("Failed to ensure demo grades/posts for students")
 
         logger.info("Database initialization complete.")
     except Exception:
