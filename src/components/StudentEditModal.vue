@@ -12,6 +12,7 @@ const emit = defineEmits(['close', 'save'])
 const name = ref('')
 const schoolId = ref('')
 const department = ref('')
+const course = ref('')
 const password = ref('')
 
 watch(() => props.user, (newUser) => {
@@ -19,6 +20,7 @@ watch(() => props.user, (newUser) => {
     name.value = newUser.name
     schoolId.value = newUser.school_id
     department.value = newUser.department || ''
+    course.value = newUser.course || ''
     password.value = ''
   }
 })
@@ -31,6 +33,7 @@ const handleSave = () => {
     name: name.value,
     school_id: schoolId.value,
     department: department.value,
+    course: course.value,
     password: password.value
   }
 
@@ -57,6 +60,11 @@ const handleSave = () => {
         <div class="space-y-2">
           <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">Department</label>
           <input v-model="department" type="text" class="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none transition-all font-medium dark:text-white">
+        </div>
+
+        <div class="space-y-2">
+          <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">Course</label>
+          <input v-model="course" type="text" class="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none transition-all font-medium dark:text-white">
         </div>
 
         <div class="space-y-2">

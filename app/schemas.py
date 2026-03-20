@@ -26,12 +26,28 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    department: Optional[str] = None
+    course: Optional[str] = None
+    password: Optional[str] = None
+
 class GradeCreate(BaseModel):
     subject: str
     units: float = 3.0
     grade: float
     year: int = 1
     semester: int = 1
+
+class GradeUpdate(BaseModel):
+    subject: Optional[str] = None
+    units: Optional[float] = None
+    grade: Optional[float] = None
+    year: Optional[int] = None
+    semester: Optional[int] = None
+
+class GradesBulkCreate(BaseModel):
+    items: List[GradeCreate]
 
 class GradeResponse(BaseModel):
     id: int
@@ -50,6 +66,9 @@ class GradeResponse(BaseModel):
 class PostCreate(BaseModel):
     content: str
 
+class PostUpdate(BaseModel):
+    content: str
+
 class PostResponse(BaseModel):
     id: int
     content: str
@@ -64,3 +83,4 @@ class ReactionCreate(BaseModel):
 
 class CommentCreate(BaseModel):
     content: str
+    parent_id: Optional[int] = None

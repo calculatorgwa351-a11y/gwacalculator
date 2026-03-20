@@ -2,6 +2,7 @@
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import { getAvatarColor, getInitials } from '@/utils/avatar'
 
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
@@ -35,6 +36,13 @@ const setView = (view: string) => {
       </div>
 
       <nav class="space-y-1" aria-label="Sidebar Navigation">
+        <router-link
+          to="/profile"
+          class="sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A9 9 0 1118.364 4.561 9 9 0 015.12 17.804z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Profile
+        </router-link>
         <button 
           @click="setView('overview')"
           :class="['sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all', activeView === 'overview' ? 'active bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-400']"
@@ -73,6 +81,37 @@ const setView = (view: string) => {
           Admin Console
         </router-link>
       </nav>
+
+      <div
+        v-if="authStore.user"
+        class="mt-6 p-4 rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="w-11 h-11 rounded-2xl text-white flex items-center justify-center font-black"
+            :style="{ backgroundColor: getAvatarColor(authStore.user.school_id) }"
+          >
+            {{ getInitials(authStore.user.name) }}
+          </div>
+          <div class="min-w-0">
+            <div class="font-black text-slate-900 dark:text-white text-sm truncate">{{ authStore.user.name }}</div>
+            <div class="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-widest truncate">
+              {{ authStore.user.school_id }}
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <span v-if="authStore.user.department" class="px-2 py-1 rounded-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            {{ authStore.user.department }}
+          </span>
+          <span v-if="authStore.user.course" class="px-2 py-1 rounded-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            {{ authStore.user.course }}
+          </span>
+          <span v-if="authStore.isAdmin" class="px-2 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">
+            Admin
+          </span>
+        </div>
+      </div>
     </div>
 
     <div class="mt-auto p-6 border-t border-slate-100 dark:border-slate-800">

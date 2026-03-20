@@ -1,33 +1,62 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from app.database import engine, Base, SessionLocal
-from app.models import Department, Course, User, Admin
-from app.routers import api
-import os
+import logging
 from pathlib import Path
 
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import FileResponse
+
+from app.config import get_settings
+from app.database import Base, SessionLocal, engine
+from app.models import Admin, Course, Department, User
+from app.routers import api
+
+settings = get_settings()
+
+logging.basicConfig(
+    level=getattr(logging, settings.log_level, logging.INFO),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
-    title="GWA Calculator", 
-    version="2.0",
+    title="GWA Calculator",
+    version="2.1",
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
 )
 
-# CORS configuration
+allow_credentials = settings.cors_allow_credentials and "*" not in settings.cors_allowed_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
-    allow_credentials=True,
+    allow_origins=settings.cors_allowed_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 
-# Include routers
+
+@app.middleware("http")
+async def security_headers_middleware(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if settings.is_production and request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
 app.include_router(api.router)
 
-# Serve the built SPA (Docker/production)
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "environment": settings.app_env}
+
+
 DIST_DIR = Path("dist")
 if DIST_DIR.exists():
     @app.get("/")
@@ -36,7 +65,6 @@ if DIST_DIR.exists():
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        # Never treat /api/* as frontend routes
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404)
 
@@ -46,96 +74,118 @@ if DIST_DIR.exists():
 
         return FileResponse(DIST_DIR / "index.html")
 
-# Database initialization
+
 def init_database():
-    """Initialize database with basic structure and admin user"""
-    print("🗄️ Initializing FastAPI database...")
-    
+    """Initialize schema and optional bootstrap/demo records."""
+    logger.info("Initializing database...")
     Base.metadata.create_all(bind=engine)
-    
+
     db = SessionLocal()
     try:
-        # Create departments and courses (COTE, COED, CBM)
         departments_data = [
-            {'name': 'COTE', 'courses': ['Computer Science', 'Computer Engineering']},
-            {'name': 'COED', 'courses': ['Elementary Education', 'Secondary Education']},
-            {'name': 'CBM', 'courses': ['Business Administration', 'Accountancy']}
+            {"name": "COTE", "courses": ["Computer Science", "Computer Engineering"]},
+            {"name": "COED", "courses": ["Elementary Education", "Secondary Education"]},
+            {"name": "CBM", "courses": ["Business Administration", "Accountancy"]},
         ]
-        
+
         for dept_data in departments_data:
-            dept = db.query(Department).filter(Department.name == dept_data['name']).first()
+            dept = db.query(Department).filter(Department.name == dept_data["name"]).first()
             if not dept:
-                dept = Department(name=dept_data['name'])
+                dept = Department(name=dept_data["name"])
                 db.add(dept)
                 db.commit()
-                print(f"✅ Created department: {dept.name}")
-            
-            for course_name in dept_data['courses']:
-                course = db.query(Course).filter(Course.name == course_name, Course.department_id == dept.id).first()
+                logger.info("Created department %s", dept.name)
+
+            for course_name in dept_data["courses"]:
+                course = (
+                    db.query(Course)
+                    .filter(Course.name == course_name, Course.department_id == dept.id)
+                    .first()
+                )
                 if not course:
                     course = Course(name=course_name, department_id=dept.id)
                     db.add(course)
                     db.commit()
-                    print(f"✅ Created course: {course_name} in {dept.name}")
-        
-        # Create admin user (and ensure admin rights exist)
-        admin_user = db.query(User).filter(User.school_id == 'admin').first()
+                    logger.info("Created course %s under %s", course_name, dept.name)
+
+        admin_school_id = settings.default_admin_school_id
+        admin_user = db.query(User).filter(User.school_id == admin_school_id).first()
         if not admin_user:
-            admin_user = User(
-                school_id='admin',
-                name='Administrator',
-                department='COTE',
-                course='Administration'
-            )
-            admin_user.set_password('adminpass')
-            db.add(admin_user)
-            db.commit()
-            print("✅ Created admin user: admin / adminpass")
+            if settings.default_admin_password:
+                admin_user = User(
+                    school_id=admin_school_id,
+                    name=settings.default_admin_name,
+                    department="COTE",
+                    course="Administration",
+                )
+                admin_user.set_password(settings.default_admin_password)
+                db.add(admin_user)
+                db.commit()
+                logger.info("Created bootstrap admin user %s", admin_school_id)
+            else:
+                logger.warning(
+                    "Admin user does not exist and DEFAULT_ADMIN_PASSWORD is empty; "
+                    "skipping bootstrap admin creation."
+                )
 
-        admin_record = db.query(Admin).filter(Admin.user_id == admin_user.id).first()
-        if not admin_record:
-            admin_record = Admin(user_id=admin_user.id)
-            db.add(admin_record)
+        if admin_user and not admin_user.name:
+            admin_user.name = settings.default_admin_name
             db.commit()
-            print("✅ Granted admin rights")
 
-        # Check if any students exist
-        student_count = db.query(User).filter(User.school_id != 'admin').count()
-        if student_count == 0:
-            print("⚠️ No students found. Triggering dummy data generation...")
+        if admin_user:
+            admin_record = db.query(Admin).filter(Admin.user_id == admin_user.id).first()
+            if not admin_record:
+                db.add(Admin(user_id=admin_user.id))
+                db.commit()
+                logger.info("Granted admin rights to %s", admin_school_id)
+
+        student_count = db.query(User).filter(User.school_id != admin_school_id).count()
+        if settings.seed_demo_data and student_count == 0:
+            logger.info("No students found; generating demo seed data.")
             try:
                 from init import generate_dummy_data
-                generate_dummy_data(db)
-            except Exception as e:
-                print(f"❌ Failed to generate dummy data: {e}")
-        else:
-            # FORCE RESET all users on startup for testing/recovery
-            users = db.query(User).all()
-            for u in users:
-                p = 'adminpass' if u.school_id == 'admin' else 'password123'
-                u.set_password(p)
-            db.commit()
-            print(f"✅ Verified and reset passwords for {len(users)} users")
-        
-        # Ensure students always have some grades (for dashboards/analytics)
-        try:
-            from init import ensure_grades_for_all_students
-            ensure_grades_for_all_students(db, min_subjects=8)
-        except Exception as e:
-            print(f"?? Failed to seed student grades: {e}")
 
-        print("🗄️ FastAPI database initialization complete!")
-        
-    except Exception as e:
-        print(f"❌ Database initialization failed: {e}")
+                generate_dummy_data(db)
+            except Exception:
+                logger.exception("Failed to generate dummy data")
+        elif student_count == 0:
+            logger.info("No students found; demo seeding disabled.")
+
+        if settings.reset_demo_passwords:
+            users = db.query(User).all()
+            for user in users:
+                password = settings.default_admin_password if user.school_id == admin_school_id else "password123"
+                if password:
+                    user.set_password(password)
+            db.commit()
+            logger.info("Reset passwords for %s users (demo mode).", len(users))
+
+        if settings.seed_demo_data:
+            try:
+                from init import ensure_grades_for_all_students
+
+                ensure_grades_for_all_students(db, min_subjects=8)
+            except Exception:
+                logger.exception("Failed to ensure demo grades for students")
+
+        logger.info("Database initialization complete.")
+    except Exception:
+        logger.exception("Database initialization failed")
         db.rollback()
+        raise
     finally:
         db.close()
 
+
 @app.on_event("startup")
 async def startup_event():
-    init_database()
+    if settings.init_db_on_startup:
+        init_database()
+    else:
+        logger.info("INIT_DB_ON_STARTUP is disabled; skipping startup DB initialization.")
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=5000, reload=True)
+
+    uvicorn.run("app.main:app", host="0.0.0.0", port=5000, reload=not settings.is_production)

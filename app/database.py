@@ -1,49 +1,40 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-import os
 import ssl
+
 import certifi
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Database Configuration
-class Config:
-    SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')
-    DATABASE_URL = os.getenv('DATABASE_URL')
-    
-    # Database configuration
-    PGUSER = os.getenv('PGUSER')
-    PGPASSWORD = os.getenv('PGPASSWORD')
-    PGHOST = os.getenv('PGHOST')
-    PGPORT = os.getenv('PGPORT', '5432')
-    PGDATABASE = os.getenv('PGDATABASE')
-    SUPABASE_SSL_NO_VERIFY = os.getenv('SUPABASE_SSL_NO_VERIFY', '0').lower() in ("1", "true", "yes")
-    
-    @property
-    def database_url(self):
-        # Explicit override (useful for Docker/CI)
-        if self.DATABASE_URL:
-            return self.DATABASE_URL
+from app.config import get_settings
 
-        if self.PGUSER and self.PGPASSWORD and self.PGHOST and self.PGPORT and self.PGDATABASE:
-            # Use PostgreSQL (Supabase)
-            if self.SUPABASE_SSL_NO_VERIFY:
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-            else:
-                ctx = ssl.create_default_context(cafile=certifi.where())
-            
-            return f"postgresql+pg8000://{self.PGUSER}:{self.PGPASSWORD}@{self.PGHOST}:{self.PGPORT}/{self.PGDATABASE}?ssl_context={ctx}"
+
+settings = get_settings()
+
+engine_kwargs: dict = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+}
+
+database_url = settings.database_url
+
+if database_url.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    engine_kwargs["pool_size"] = settings.db_pool_size
+    engine_kwargs["max_overflow"] = settings.db_max_overflow
+
+    if database_url.startswith("postgresql"):
+        if settings.supabase_ssl_no_verify:
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
         else:
-            # Use SQLite for local development
-            return "sqlite:///gwa_calculator.db"
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+        engine_kwargs["connect_args"] = {"ssl_context": ssl_context}
 
-config = Config()
-
-# Database setup
-engine = create_engine(config.database_url, pool_pre_ping=True, pool_recycle=300, pool_size=10, max_overflow=20)
+engine = create_engine(database_url, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
 
 def get_db():
     db = SessionLocal()

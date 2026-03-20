@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { apiFetch } from '@/utils/apiClient'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -26,10 +27,7 @@ const handleRegister = async () => {
     formData.append('school_id', schoolId.value)
     formData.append('password', password.value)
 
-    const res = await fetch('/api/register', {
-      method: 'POST',
-      body: formData
-    })
+    const res = await apiFetch('/api/register', { method: 'POST', body: formData, skipAuthError: true })
 
     const data = await res.json()
 

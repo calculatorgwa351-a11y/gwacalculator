@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { User } from '@/types'
+import { apiFetch } from '@/utils/apiClient'
 
 interface AuthState {
   user: User | null
@@ -18,11 +19,16 @@ export const useAuthStore = defineStore('auth', {
     isAdmin: (state) => !!state.user?.is_admin
   },
   actions: {
+    handleUnauthorized() {
+      this.user = null
+      this.hydrated = true
+      this.isLoading = false
+    },
     async fetchMe() {
       if (this.isLoading) return
       this.isLoading = true
       try {
-        const res = await fetch('/api/me')
+        const res = await apiFetch('/api/me', { skipAuthError: true })
         if (!res.ok) {
           this.user = null
           return
@@ -38,7 +44,7 @@ export const useAuthStore = defineStore('auth', {
     },
     async logout() {
       try {
-        await fetch('/api/logout', { method: 'POST' })
+        await apiFetch('/api/logout', { method: 'POST' })
       } catch (err) {
         console.error('Logout failed:', err)
       } finally {
@@ -48,4 +54,3 @@ export const useAuthStore = defineStore('auth', {
     }
   }
 })
-

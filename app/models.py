@@ -112,11 +112,13 @@ class Comment(Base):
     id = Column(Integer, primary_key=True, index=True)
     post_id = Column(Integer, ForeignKey('post.id'), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey('user.id'), nullable=False, index=True)
+    parent_comment_id = Column(Integer, ForeignKey('comment.id'), nullable=True, index=True)
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     
     post = relationship("Post", back_populates="comments")
     author = relationship("User")
+    parent = relationship("Comment", remote_side=[id], backref="replies")
 
 class SubjectGrade(Base):
     __tablename__ = 'subject_grade'
@@ -142,3 +144,16 @@ class Admin(Base):
     user_id = Column(Integer, ForeignKey('user.id'), unique=True)
     
     user = relationship("User")
+
+class AdminAudit(Base):
+    __tablename__ = 'admin_audit'
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_user_id = Column(Integer, ForeignKey('user.id'), nullable=False, index=True)
+    action = Column(String(64), nullable=False, index=True)
+    target_type = Column(String(64), nullable=True, index=True)
+    target_id = Column(Integer, nullable=True, index=True)
+    meta_json = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+    admin_user = relationship("User")

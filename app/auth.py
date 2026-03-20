@@ -1,17 +1,36 @@
-from fastapi import Request, HTTPException, Depends, status
-from sqlalchemy.orm import Session
-from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
-import os
+
+from fastapi import Depends, HTTPException, Request, status
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+
+from app.config import get_settings
 from app.database import get_db
-from app.models import User, Admin
+from app.models import Admin, User
+
+settings = get_settings()
 
 # Security Configuration
-SECRET_KEY = os.getenv('SECRET_KEY', '7d8f9e0a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z')
+SECRET_KEY = settings.secret_key
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Extended to 1 hour
-COOKIE_NAME = "access_token"
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
+COOKIE_NAME = settings.cookie_name
+
+
+def get_cookie_settings(request: Optional[Request] = None) -> dict:
+    secure = settings.cookie_secure
+    if secure is None:
+        secure = bool(request and request.url.scheme == "https")
+
+    return {
+        "max_age": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "httponly": True,
+        "samesite": settings.cookie_samesite,
+        "secure": secure,
+        "path": "/",
+        "domain": settings.cookie_domain,
+    }
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Create a secure JWT access token"""

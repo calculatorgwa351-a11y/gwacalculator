@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Chart from 'chart.js/auto'
 import type { AdminStudentDetail } from '@/types'
+import { apiFetch } from '@/utils/apiClient'
 
 const props = defineProps<{
   isOpen: boolean
@@ -33,7 +34,7 @@ const renderCharts = async () => {
   // Timeline (cumulative GWA)
   if (timelineRef.value) {
     try {
-      const res = await fetch(`/api/analytics/user-timeline?user_id=${props.studentId}`)
+      const res = await apiFetch(`/api/analytics/user-timeline?user_id=${props.studentId}`)
       if (res.ok) {
         const data = await res.json()
         const labels = (data.timeline || []).map((item: any) => new Date(item.timestamp).toLocaleDateString())
@@ -66,7 +67,7 @@ const renderCharts = async () => {
               maintainAspectRatio: false,
               plugins: { legend: { display: false } },
               scales: {
-                y: { reverse: true, suggestedMin: 1.0, suggestedMax: 5.0 },
+                y: { reverse: false, min: 1.0, max: 5.0 },
                 x: { grid: { display: false } }
               }
             }
@@ -111,8 +112,8 @@ const renderCharts = async () => {
           maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: {
-            y: { reverse: true, suggestedMin: 1.0, suggestedMax: 5.0 },
-            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } }
+            y: { reverse: false, min: 1.0, max: 5.0, beginAtZero: false },
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } }
           }
         }
       })
@@ -124,9 +125,10 @@ const fetchDetail = async () => {
   if (!props.studentId) return
   isLoading.value = true
   try {
-    const res = await fetch(`/api/admin/student/${props.studentId}`)
+    const res = await apiFetch(`/api/admin/student/${props.studentId}`)
     if (res.ok) {
       detail.value = (await res.json()) as AdminStudentDetail
+      await nextTick()
       await renderCharts()
     }
   } catch (err) {
@@ -139,7 +141,11 @@ const fetchDetail = async () => {
 watch(
   () => [props.isOpen, props.studentId] as const,
   async ([open]) => {
-    if (open) await fetchDetail()
+    if (open) {
+      await fetchDetail()
+      await nextTick()
+      await renderCharts()
+    }
     else destroyCharts()
   }
 )
@@ -209,4 +215,3 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-

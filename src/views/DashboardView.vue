@@ -7,6 +7,7 @@ import GradeList from '@/components/GradeList.vue'
 import Handbook from '@/components/Handbook.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import { apiFetch } from '@/utils/apiClient'
 import type { DashboardSummary } from '@/types'
 
 const authStore = useAuthStore()
@@ -26,7 +27,7 @@ const fetchDashboardData = async () => {
       return
     }
 
-    const res = await fetch('/api/dashboard/summary')
+    const res = await apiFetch('/api/dashboard/summary')
     if (res.status === 401) {
       await authStore.fetchMe()
       router.push('/')
@@ -48,10 +49,9 @@ const handleCreatePost = async () => {
   if (!newPostContent.value) return
 
   try {
-    const res = await fetch('/api/posts', {
+    const res = await apiFetch('/api/posts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: newPostContent.value })
+      json: { content: newPostContent.value }
     })
 
     if (res.ok) {
@@ -80,6 +80,49 @@ const honorsBadge = computed(() => {
   if (!honors) return null
   if (!honors.eligible || !honors.title) return null
   return honors.title
+})
+
+const honorsProgress = computed(() => {
+  const gwa = summary.value?.gwa
+  const nextTarget = summary.value?.honors_progress?.next_target
+  const thresholds: Record<string, number> = {
+    'Cum Laude': 1.75,
+    'Magna Cum Laude': 1.45,
+    'Summa Cum Laude': 1.2
+  }
+  const target = nextTarget ? thresholds[nextTarget] : undefined
+  if (!gwa || !target) return 0
+  const raw = target / gwa
+  return Math.min(1, Math.max(0, raw))
+})
+
+const blockingItems = computed(() => {
+  const items: string[] = []
+  const progress = summary.value?.honors_progress
+  if (!summary.value?.gwa) return items
+  if (progress?.failed_count) items.push('Remove failing grades above 3.00')
+  if (progress?.above_2_5_count) items.push('Improve grades above 2.50')
+  if (progress?.next_target) {
+    items.push(`Reduce GWA to reach ${progress.next_target}`)
+  }
+  return items
+})
+
+const achievements = computed(() => {
+  const list: { title: string; description: string }[] = []
+  if ((summary.value?.grade_count || 0) >= 5) {
+    list.push({ title: 'First 5 Subjects', description: 'You logged at least five subjects.' })
+  }
+  if (summary.value?.honors?.eligible) {
+    list.push({ title: 'Honors Candidate', description: 'You meet Latin honors requirements.' })
+  }
+  if ((summary.value?.post_count || 0) >= 3) {
+    list.push({ title: 'Active Contributor', description: 'You shared multiple posts.' })
+  }
+  if ((summary.value?.grade_count || 0) > 0) {
+    list.push({ title: 'GWA Tracker', description: 'You are actively tracking your grades.' })
+  }
+  return list
 })
 </script>
 
@@ -159,6 +202,43 @@ const honorsBadge = computed(() => {
                   <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">My Posts</div>
                   <div class="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{{ summary?.post_count ?? 0 }}</div>
                 </div>
+              </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
+              <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Honors Progress</h3>
+              <div class="w-full h-3 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
+                <div
+                  class="h-full bg-blue-600 rounded-full transition-all"
+                  :style="{ width: `${Math.round(honorsProgress * 100)}%` }"
+                ></div>
+              </div>
+              <div class="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+                <span>Progress to {{ summary?.honors_progress?.next_target || 'Next Target' }}</span>
+                <span>{{ Math.round(honorsProgress * 100) }}%</span>
+              </div>
+              <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Gap to target: {{ summary?.honors_progress?.gap_to_next_target ?? 0 }}
+              </div>
+              <div class="space-y-2">
+                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">What is blocking me</div>
+                <ul class="space-y-2">
+                  <li v-if="blockingItems.length === 0" class="text-sm text-emerald-600 font-semibold">
+                    You are on track for honors.
+                  </li>
+                  <li v-for="item in blockingItems" :key="item" class="text-sm text-slate-600 dark:text-slate-300 font-semibold">
+                    {{ item }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-3">
+              <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Achievements</h3>
+              <div v-if="achievements.length === 0" class="text-sm text-slate-500 dark:text-slate-400">Complete more actions to unlock badges.</div>
+              <div v-for="badge in achievements" :key="badge.title" class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                <div class="text-sm font-black text-slate-900 dark:text-white">{{ badge.title }}</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">{{ badge.description }}</div>
               </div>
             </div>
           </div>

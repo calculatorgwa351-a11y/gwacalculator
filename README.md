@@ -1,56 +1,44 @@
-# GWA Calculator (Refactored to Vue 3 + TypeScript)
+# GWA Calculator
 
-A modern FastAPI and Vue 3 application for students to manage academic grades and share updates. Built with the Philippine GWA system in mind.
+FastAPI + Vue 3 application for grade tracking, GWA computation, student feed, and admin analytics.
 
-## 🚀 Refactoring Overview
-This project has been refactored from a traditional server-side rendered (Jinja2) Flask-style app to a modern Single Page Application (SPA) using:
-- **Frontend**: Vue 3 (Composition API), TypeScript, Vite
-- **State Management**: Pinia
-- **Styling**: Tailwind CSS
-- **Testing**: Vitest (Unit), Cypress (E2E)
-- **Linting & Formatting**: ESLint, Prettier
+## Tech Stack
+- Backend: FastAPI, SQLAlchemy
+- Frontend: Vue 3, Vite, Pinia, Chart.js
+- Runtime: Docker Compose
 
-### 🛡️ Architecture Decisions
-1.  **TypeScript First**: All components and stores use TypeScript interfaces for type safety and to catch bugs at compile time.
-2.  **Centralized State**: Theme management and user authentication are handled by Pinia stores to eliminate variable redeclaration issues (e.g., the `themeToggle` error).
-3.  **Robust Error Handling**:
-    -   **Global Error Handler**: Catches all runtime errors and unhandled promise rejections.
-    -   **`errorCaptured` Hook**: Used in `App.vue` to intercept errors in the component tree.
-4.  **Vite Build Tool**: Used for lightning-fast development and optimized production builds.
+## Local Development
+1. Install frontend packages:
+   - `npm install`
+2. Run backend:
+   - `python -m app.main`
+3. Run frontend:
+   - `npm run dev`
 
-## 🔑 Login Credentials
-- **Admin**: `admin` / `adminpass`
-- **Students**: `2024xxxx` / `password123` (any 2024xxxx school ID)
+## Production (Docker)
+1. Copy environment file and set secure values:
+   - `copy .env.example .env`
+2. Edit `.env` and set at least:
+   - `APP_ENV=production`
+   - `SECRET_KEY=<strong-random-32+-char-value>`
+   - `DEFAULT_ADMIN_PASSWORD=<secure-bootstrap-password>`
+   - `CORS_ALLOWED_ORIGINS=<comma-separated-prod-origins>`
+   - `ALLOWED_HOSTS=<your-domain,localhost>`
+3. Build and run:
+   - `docker compose up --build -d`
+4. Verify health:
+   - `http://localhost:5000/api/health`
 
-## 🐳 Docker-Based Monitoring
-The project is configured to run in Docker with automated error resolution.
-```bash
-docker-compose up --build
-```
+## Default Demo Credentials
+- Admin: `admin / adminpass` (development/demo only)
+- Seeded students: `2024xxxx / password123`
 
-## 💻 Local Development Setup
-1.  **Install Dependencies**:
-    ```bash
-    npm install
-    ```
-2.  **Start the Backend (FastAPI)**:
-    ```bash
-    python -m app.main
-    ```
-3.  **Start the Frontend (Vite)**:
-    ```bash
-    npm run dev
-    ```
+## Validation Commands
+- `npm run type-check`
+- `npm run test:unit`
+- `npm run build-only`
+- `docker compose build`
 
-## 🧪 Testing
-- **Unit Tests**: `npm run test:unit` (Targeting >80% coverage)
-- **End-to-End Tests**: `npm run test:e2e` (Using Cypress)
-
-## 🛠️ Troubleshooting
-### "themeToggle has already been declared"
-This issue was resolved by moving the theme-switching logic into a centralized Pinia store (`src/stores/theme.ts`). In the new architecture, components interact with the store's reactive `isDark` state and `toggleTheme` method, preventing any identifier collisions.
-
-### API Connection Errors
-Ensure the FastAPI backend is running on `http://localhost:5001`. The Vite dev server is configured to proxy all `/api` requests to the backend.
-
----
+## Notes
+- In production mode, startup fails if `SECRET_KEY` is weak or missing.
+- Demo seeding is controlled with `SEED_DEMO_DATA` (defaults to `0` in production compose).

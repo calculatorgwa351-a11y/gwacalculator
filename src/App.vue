@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
 import { onErrorCaptured } from 'vue'
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
 
 // Implement Vue's errorCaptured lifecycle hook to catch errors in descendants
 onErrorCaptured((err, instance, info) => {
@@ -17,6 +20,18 @@ onErrorCaptured((err, instance, info) => {
 
 <template>
   <div class="min-h-screen text-slate-900 bg-slate-50 dark:bg-[#0f172a] dark:text-slate-200 transition-colors duration-300">
+    <div
+      v-if="session.expired"
+      class="sticky top-0 z-50 bg-amber-50 text-amber-900 border-b border-amber-100 px-6 py-3 text-sm font-semibold flex items-center justify-between"
+    >
+      <span>{{ session.message }}</span>
+      <button
+        class="px-3 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 transition"
+        @click="session.clear()"
+      >
+        Dismiss
+      </button>
+    </div>
     <RouterView />
   </div>
 </template>

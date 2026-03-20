@@ -1,59 +1,42 @@
-# Git
 .git
+.github
 .gitignore
 
-# Python
-__pycache__/
+.env
+.env.*
+!.env.example
+
+.venv
+.venv*/
+venv
+ENV
+env
+__pycache__
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
+
+node_modules
+dist
+.npm
 .cache
-nosetests.xml
-coverage.xml
-*.cover
+
+instance
+logs
 *.log
-
-# Virtual Environment
-.venv/
-venv/
-ENV/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Project specific
 *.db
 *.sqlite
 *.sqlite3
-instance/
-logs/
 
-# Documentation
-README_DOCKER.md
-docker-compose.*.yml
+cypress
+.codex
+.vscode
+.idea
 
-# Node.js
-node_modules/
-npm-debug.log
-yarn-error.log
-dist/
-.npm
-.cache
-cypress/videos
-cypress/screenshots
-.nyc_output
-.vitest-results
+*.md
+audit_report.md
+performance_report.md
+error_resolution_report.md
+AI_USAGE_LIMITS_INVESTIGATION.md
+DEVELOPMENT_PLAN_WITHIN_LIMITS.md
+MONITORING_AND_OPTIMIZATION_RECOMMENDATIONS.md

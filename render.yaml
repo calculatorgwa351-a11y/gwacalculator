@@ -3,24 +3,29 @@ services:
     name: gwacalculator
     runtime: python
     region: oregon
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: python init.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2 --proxy-headers
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.5
+        value: 3.12.2
+      - key: APP_ENV
+        value: production
       - key: SECRET_KEY
         generateValue: true
-      # Supabase PostgreSQL Configuration
-      - key: PGUSER
-        value: postgres.orzouvypfqrrerciryoy
-      - key: PGPASSWORD
-        value: VnrPNtYCDjiPDjB5
-      - key: PGHOST
-        value: aws-1-ap-southeast-2.pooler.supabase.com
-      - key: PGPORT
-        value: 6543
-      - key: PGDATABASE
-        value: postgres
-      - key: SUPABASE_SSL_NO_VERIFY
-        value: 1
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: INIT_DB_ON_STARTUP
+        value: "1"
+      - key: SEED_DEMO_DATA
+        value: "0"
+      - key: DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: WEB_CONCURRENCY
+        value: "2"
