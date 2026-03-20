@@ -1,10 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.database import engine, Base, SessionLocal
 from app.models import Department, Course, User, Admin
 from app.routers import api
 import os
+from pathlib import Path
 
 app = FastAPI(
     title="GWA Calculator", 
@@ -25,9 +27,24 @@ app.add_middleware(
 # Include routers
 app.include_router(api.router)
 
-# Mount frontend dist folder if it exists
-if os.path.exists("dist"):
-    app.mount("/", StaticFiles(directory="dist", html=True), name="frontend")
+# Serve the built SPA (Docker/production)
+DIST_DIR = Path("dist")
+if DIST_DIR.exists():
+    @app.get("/")
+    async def serve_index():
+        return FileResponse(DIST_DIR / "index.html")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Never treat /api/* as frontend routes
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404)
+
+        candidate = DIST_DIR / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+
+        return FileResponse(DIST_DIR / "index.html")
 
 # Database initialization
 def init_database():
@@ -85,12 +102,12 @@ def init_database():
         # Check if any students exist
         student_count = db.query(User).filter(User.school_id != 'admin').count()
         if student_count == 0:
-            print("⚠️ No students found. Triggering dummy data generation...")
-            try:
-                from init import generate_dummy_data
-                generate_dummy_data()
-            except Exception as e:
-                print(f"❌ Failed to generate dummy data: {e}")
+                print("⚠️ No students found. Triggering dummy data generation...")
+                try:
+                    from init import generate_dummy_data
+                    generate_dummy_data(db)
+                except Exception as e:
+                    print(f"❌ Failed to generate dummy data: {e}")
         else:
             # FORCE RESET all users on startup for testing/recovery
             users = db.query(User).all()

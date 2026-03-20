@@ -35,9 +35,33 @@ export interface SubjectGrade {
   gwa?: number
 }
 
+export interface GradeUpsert {
+  id?: number
+  subject: string
+  units: number
+  grade: number
+  year: number
+  semester: number
+}
+
 export interface Analytics {
   average_gwa: number | null
   failure_rate: number | null
+}
+
+export interface HonorsResult {
+  eligible: boolean
+  reason: string
+  title: string | null
+  gwa?: number
+  status?: string
+}
+
+export interface DashboardSummary {
+  gwa: number | null
+  honors: HonorsResult
+  grade_count: number
+  post_count: number
 }
 
 export interface ThemeState {

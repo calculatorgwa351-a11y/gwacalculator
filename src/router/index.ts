@@ -43,6 +43,11 @@ router.beforeEach(async (to) => {
     await auth.fetchMe()
   }
 
+  // If we need auth but don't have a user yet, re-check (login can happen after initial hydration).
+  if (needsAuth && !auth.isAuthenticated) {
+    await auth.fetchMe()
+  }
+
   if (to.meta.requiresAdmin) {
     if (!auth.isAuthenticated) return { path: '/' }
     if (!auth.isAdmin) return { path: '/dashboard' }

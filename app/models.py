@@ -2,10 +2,9 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Tex
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
-from passlib.context import CryptContext
+import hashlib
+from werkzeug.security import generate_password_hash, check_password_hash
 from app.database import Base
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class User(Base):
     __tablename__ = 'user'
@@ -20,8 +19,33 @@ class User(Base):
     posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
     grades = relationship("SubjectGrade", back_populates="student", cascade="all, delete-orphan")
     
+    @staticmethod
+    def _password_for_hashing(password) -> str:
+        """
+        bcrypt only supports up to 72 bytes of input.
+        For longer passwords, pre-hash with SHA-256 to avoid runtime errors and
+        avoid bcrypt's silent truncation behavior.
+        """
+        if password is None:
+            return ""
+
+        if isinstance(password, bytes):
+            raw = password
+            text = password.decode("utf-8", errors="ignore")
+        else:
+            text = str(password)
+            raw = text.encode("utf-8")
+
+        if len(raw) <= 72:
+            return text
+
+        digest = hashlib.sha256(raw).hexdigest()
+        return f"sha256:{digest}"
+
     def set_password(self, password):
-        self.password_hash = pwd_context.hash(password)
+        # Use Werkzeug PBKDF2 (works well cross-platform and avoids bcrypt backend issues)
+        normalized = self._password_for_hashing(password)
+        self.password_hash = generate_password_hash(normalized, method="pbkdf2:sha256", salt_length=16)
     
     def check_password(self, password):
         if not self.password_hash:
@@ -29,18 +53,19 @@ class User(Base):
             
         # Werkzeug hashes usually start with pbkdf2:
         if self.password_hash.startswith('pbkdf2:sha256:'):
-            from werkzeug.security import check_password_hash
-            return check_password_hash(self.password_hash, password)
+            return check_password_hash(self.password_hash, self._password_for_hashing(password))
             
         try:
-            return pwd_context.verify(password, self.password_hash)
+            # Backward-compat: if a bcrypt hash exists in the DB, try verifying with bcrypt directly.
+            if self.password_hash.startswith(("$2a$", "$2b$", "$2y$")):
+                import bcrypt
+
+                candidate = self._password_for_hashing(password).encode("utf-8")
+                return bcrypt.checkpw(candidate, self.password_hash.encode("utf-8"))
         except Exception:
-            # Last resort fallback
-            try:
-                from werkzeug.security import check_password_hash
-                return check_password_hash(self.password_hash, password)
-            except:
-                return False
+            return False
+
+        return False
 
 class Department(Base):
     __tablename__ = 'department'

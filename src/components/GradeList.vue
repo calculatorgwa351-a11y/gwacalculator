@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import type { SubjectGrade } from '@/types'
+import type { SubjectGrade, GradeUpsert } from '@/types'
 import GradeEditModal from './GradeEditModal.vue'
 
 const grades = ref<SubjectGrade[]>([])
@@ -27,15 +27,22 @@ const openEditModal = (grade: SubjectGrade) => {
   isModalOpen.value = true
 }
 
-const handleSaveGrade = async (updatedGrade: SubjectGrade) => {
+const openCreateModal = () => {
+  selectedGrade.value = null
+  isModalOpen.value = true
+}
+
+const handleSaveGrade = async (gradeUpsert: GradeUpsert) => {
   try {
-    const res = await fetch(`/api/grades/${updatedGrade.id}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedGrade)
-      }
-    )
+    const isEdit = typeof gradeUpsert.id === 'number'
+    const url = isEdit ? `/api/grades/${gradeUpsert.id}` : '/api/grades'
+    const method = isEdit ? 'PUT' : 'POST'
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(gradeUpsert)
+    })
 
     if (res.ok) {
       await fetchGrades()
@@ -74,6 +81,16 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Subjects</h3>
+      <button
+        @click="openCreateModal"
+        class="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all active:scale-95"
+      >
+        Add Subject
+      </button>
+    </div>
+
     <div v-if="isLoading" class="space-y-4">
       <div v-for="i in 3" :key="i" class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 animate-pulse">
         <div class="h-4 bg-slate-50 dark:bg-slate-700 rounded w-full mb-2"></div>
@@ -82,7 +99,7 @@ onMounted(() => {
     </div>
 
     <div v-else-if="grades.length === 0" class="text-center p-12 text-slate-400 dark:text-slate-500 italic">
-      No grades recorded yet. Start by adding your first subject!
+      No subjects recorded yet. Click “Add Subject” to start calculating your GWA.
     </div>
 
     <div v-for="grade in grades" :key="grade.id" class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm animate-in">

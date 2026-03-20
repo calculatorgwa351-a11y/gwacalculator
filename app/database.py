@@ -8,6 +8,7 @@ import certifi
 # Database Configuration
 class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')
+    DATABASE_URL = os.getenv('DATABASE_URL')
     
     # Database configuration
     PGUSER = os.getenv('PGUSER')
@@ -19,6 +20,10 @@ class Config:
     
     @property
     def database_url(self):
+        # Explicit override (useful for Docker/CI)
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+
         if self.PGUSER and self.PGPASSWORD and self.PGHOST and self.PGPORT and self.PGDATABASE:
             # Use PostgreSQL (Supabase)
             if self.SUPABASE_SSL_NO_VERIFY:

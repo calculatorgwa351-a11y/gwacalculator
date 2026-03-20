@@ -1,7 +1,6 @@
 from fastapi import Request, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from typing import Optional
 import os
@@ -9,7 +8,6 @@ from app.database import get_db
 from app.models import User, Admin
 
 # Security Configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = os.getenv('SECRET_KEY', '7d8f9e0a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z')
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Extended to 1 hour

@@ -34,6 +34,26 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
         "is_admin": is_admin(user, db)
     }
 
+@router.get("/dashboard/summary")
+async def get_dashboard_summary(request: Request, db: Session = Depends(get_db)):
+    """Small summary payload for the student dashboard."""
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    gwa = compute_gwa_for_user(user.id, db)
+    honors = analyze_latin_honors(user.id, db)
+
+    grade_count = db.query(SubjectGrade).filter(SubjectGrade.user_id == user.id).count()
+    post_count = db.query(Post).filter(Post.user_id == user.id).count()
+
+    return {
+        "gwa": gwa,
+        "honors": honors,
+        "grade_count": grade_count,
+        "post_count": post_count
+    }
+
 @router.post("/login")
 async def api_login(request: Request, db: Session = Depends(get_db)):
     """AJAX/API login endpoint - always returns JSON"""
@@ -88,6 +108,34 @@ async def api_logout():
     response = JSONResponse(content={"success": True, "redirect": "/"})
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return response
+
+@router.post("/register")
+async def api_register(request: Request, db: Session = Depends(get_db)):
+    """Register a new student account (FormData)."""
+    try:
+        body = await request.form()
+        name = (body.get("name") or "").strip()
+        school_id = (body.get("school_id") or "").strip()
+        password = body.get("password") or ""
+    except Exception:
+        return JSONResponse(content={"error": "Invalid request format"}, status_code=400)
+
+    if not name or not school_id or not password:
+        return JSONResponse(content={"error": "All fields are required"}, status_code=400)
+
+    if school_id.lower() == "admin":
+        return JSONResponse(content={"error": "School ID not allowed"}, status_code=400)
+
+    existing = db.query(User).filter(User.school_id == school_id).first()
+    if existing:
+        return JSONResponse(content={"error": "School ID already exists"}, status_code=400)
+
+    new_user = User(school_id=school_id, name=name)
+    new_user.set_password(password)
+    db.add(new_user)
+    db.commit()
+
+    return JSONResponse(content={"success": True})
 
 @router.get("/posts")
 async def get_posts(request: Request, page: int = 1, limit: int = 10, db: Session = Depends(get_db)):

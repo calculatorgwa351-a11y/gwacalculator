@@ -4,6 +4,7 @@ import type { Post } from '@/types'
 
 const posts = ref<Post[]>([])
 const isLoading = ref(true)
+const commentDraft = ref<Record<number, string>>({})
 
 const fetchPosts = async () => {
   isLoading.value = true
@@ -35,6 +36,30 @@ const reactToPost = async (postId: number, type: string) => {
     }
   } catch (err) {
     console.error('Failed to react:', err)
+  }
+}
+
+const addComment = async (postId: number) => {
+  const content = (commentDraft.value[postId] || '').trim()
+  if (!content) return
+
+  try {
+    const res = await fetch(`/api/posts/${postId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    })
+
+    if (res.ok) {
+      const newComment = await res.json()
+      const post = posts.value.find((p) => p.id === postId)
+      if (post) {
+        post.comments = [...(post.comments || []), newComment]
+      }
+      commentDraft.value[postId] = ''
+    }
+  } catch (err) {
+    console.error('Failed to comment:', err)
   }
 }
 
@@ -94,6 +119,34 @@ onMounted(() => {
           <span v-else-if="type === 'wow'">😮</span>
           <span class="text-xs font-black text-slate-400 dark:text-slate-500">{{ count }}</span>
         </button>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        <div v-if="post.comments?.length" class="space-y-2">
+          <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Comments</div>
+          <div v-for="c in post.comments" :key="c.id" class="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+            <div class="flex items-center justify-between">
+              <div class="text-xs font-black text-slate-700 dark:text-slate-200">{{ c.user }}</div>
+              <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{{ new Date(c.timestamp).toLocaleDateString() }}</div>
+            </div>
+            <div class="text-sm text-slate-600 dark:text-slate-300 font-medium mt-1">{{ c.content }}</div>
+          </div>
+        </div>
+
+        <form @submit.prevent="addComment(post.id)" class="flex items-center gap-2">
+          <input
+            v-model="commentDraft[post.id]"
+            type="text"
+            placeholder="Write a comment..."
+            class="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none transition-all font-medium dark:text-white"
+          >
+          <button
+            type="submit"
+            class="px-4 py-3 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-blue-700 transition-all active:scale-95"
+          >
+            Send
+          </button>
+        </form>
       </div>
     </div>
   </div>

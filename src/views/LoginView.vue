@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const schoolId = ref('')
 const password = ref('')
 const error = ref('')
@@ -30,7 +32,9 @@ const handleLogin = async () => {
     const data = await res.json()
 
     if (res.ok && data.success) {
-      router.push(data.redirect)
+      // Refresh auth state so route guards can see the logged-in user.
+      await authStore.fetchMe()
+      router.push(authStore.isAdmin ? '/admin' : '/dashboard')
     } else {
       error.value = data.error || 'Invalid credentials'
     }

@@ -7,13 +7,14 @@ import GradeList from '@/components/GradeList.vue'
 import Handbook from '@/components/Handbook.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import type { DashboardSummary } from '@/types'
 
 const authStore = useAuthStore()
 const router = useRouter()
 const user = computed(() => authStore.user)
 const activeView = ref('overview')
-const gwa = ref(0)
-const honors = ref<any>(null)
+const summary = ref<DashboardSummary | null>(null)
+const postsRefreshKey = ref(0)
 
 const newPostContent = ref('')
 
@@ -25,14 +26,14 @@ const fetchDashboardData = async () => {
       return
     }
 
-    const res = await fetch('/api/grades')
+    const res = await fetch('/api/dashboard/summary')
     if (res.status === 401) {
       await authStore.fetchMe()
       router.push('/')
       return
     }
     if (res.ok) {
-      await res.json()
+      summary.value = (await res.json()) as DashboardSummary
     }
   } catch (err) {
     console.error('Failed to fetch dashboard data:', err)
@@ -47,19 +48,16 @@ const handleCreatePost = async () => {
   if (!newPostContent.value) return
 
   try {
-    const formData = new FormData()
-    formData.append('content', newPostContent.value)
-
     const res = await fetch('/api/posts', {
       method: 'POST',
-      body: formData
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newPostContent.value })
     })
 
     if (res.ok) {
       newPostContent.value = ''
-      // Ideally, the PostList component should re-fetch posts
-      // For now, we'll just reload the page
-      window.location.reload()
+      postsRefreshKey.value += 1
+      await fetchDashboardData()
     }
   } catch (err) {
     console.error('Failed to create post:', err)
@@ -76,6 +74,13 @@ const viewTitles: Record<string, string> = {
   social: 'Student Feed',
   handbook: 'Student Handbook'
 }
+
+const honorsBadge = computed(() => {
+  const honors = summary.value?.honors
+  if (!honors) return null
+  if (!honors.eligible || !honors.title) return null
+  return honors.title
+})
 </script>
 
 <template>
@@ -92,22 +97,68 @@ const viewTitles: Record<string, string> = {
             Welcome back, {{ user?.name || 'Student' }}
           </p>
         </div>
+        <div class="flex items-center gap-3">
+          <router-link
+            v-if="authStore.isAdmin"
+            to="/admin"
+            class="px-4 py-2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-xl hover:opacity-90 transition-all"
+          >
+            Admin Dashboard
+          </router-link>
+        </div>
       </header>
 
       <div v-show="activeView === 'overview'" class="space-y-8 animate-in">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
+          <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none relative overflow-hidden">
             <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-6">Performance History</h3>
             <GwaChart v-if="user" :user-id="user.id" />
+
+            <div
+              v-if="(summary?.grade_count ?? 0) === 0"
+              class="absolute inset-0 flex items-center justify-center p-8"
+            >
+              <div class="max-w-md w-full bg-white/80 dark:bg-slate-900/70 backdrop-blur rounded-[2rem] border border-slate-100 dark:border-slate-700 p-6 text-center shadow-lg">
+                <div class="text-sm font-black text-slate-900 dark:text-white">No grades yet</div>
+                <div class="mt-1 text-sm text-slate-500 dark:text-slate-400 font-medium">
+                  Add your subjects to calculate your GWA and check Latin honors eligibility.
+                </div>
+                <button
+                  class="mt-4 px-5 py-3 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-blue-700 transition-all active:scale-95"
+                  @click="setView('grades')"
+                >
+                  Add Subject
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="space-y-8">
             <div class="bg-gradient-to-br from-blue-600 to-blue-800 p-8 rounded-[2.5rem] text-white shadow-xl shadow-blue-500/20">
               <h3 class="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">Current GWA</h3>
-              <div class="text-5xl font-black tracking-tight mb-4 tabular-nums">1.25</div>
-              <div class="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-[10px] font-bold">
-                <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
-                Honors Eligible
+              <div class="text-5xl font-black tracking-tight mb-4 tabular-nums">
+                {{ summary?.gwa?.toFixed(3) ?? '—' }}
+              </div>
+              <div v-if="honorsBadge" class="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest">
+                <span class="w-2 h-2 bg-emerald-400 rounded-full"></span>
+                {{ honorsBadge }}
+              </div>
+              <div v-else class="text-xs font-bold opacity-80 leading-relaxed">
+                {{ summary?.honors?.reason ?? 'Add your subjects to see your Latin honors eligibility.' }}
+              </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+              <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4">Quick Stats</h3>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Subjects</div>
+                  <div class="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{{ summary?.grade_count ?? 0 }}</div>
+                </div>
+                <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">My Posts</div>
+                  <div class="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{{ summary?.post_count ?? 0 }}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -127,7 +178,7 @@ const viewTitles: Record<string, string> = {
             </div>
           </form>
         </div>
-        <PostList />
+        <PostList :key="postsRefreshKey" />
       </div>
 
       <div v-show="activeView === 'handbook'">

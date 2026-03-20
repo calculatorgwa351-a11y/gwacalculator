@@ -5,14 +5,14 @@ WORKDIR /app/frontend
 
 # Install dependencies separately for better caching
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copy all files for building the frontend
 COPY . .
 RUN npm run build
 
 # --- Stage 2: Build Backend & Runtime ---
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 

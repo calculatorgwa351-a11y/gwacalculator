@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const name = ref('')
 const schoolId = ref('')
 const password = ref('')
@@ -32,6 +34,8 @@ const handleRegister = async () => {
     const data = await res.json()
 
     if (res.ok && data.success) {
+      // Registration doesn't auto-login; ensure auth store is clean.
+      await authStore.fetchMe()
       router.push('/')
     } else {
       error.value = data.error || 'Registration failed'
