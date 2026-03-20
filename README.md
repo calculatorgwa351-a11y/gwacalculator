@@ -30,8 +30,9 @@ FastAPI + Vue 3 application for grade tracking, GWA computation, student feed, a
    - `http://localhost:5000/api/health`
 
 ## Render Deploy
-- This repo is configured for Render with `gunicorn app:app` and `gunicorn.conf.py`.
-- Gunicorn uses `uvicorn.workers.UvicornWorker` from config, so FastAPI runs correctly.
+- This repo now deploys on Render as a **Docker web service** (`render.yaml`).
+- Docker is required so the frontend `dist` bundle is built and served by FastAPI at `/`.
+- If you see `{"detail":"Not Found"}` on `/`, your Render service is still using native Python runtime.
 
 ## Default Demo Credentials
 - Admin: `admin / adminpass` (development/demo only)

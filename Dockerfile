@@ -35,4 +35,4 @@ COPY --from=frontend-builder /app/frontend/dist ./dist
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 5000 --workers ${WEB_CONCURRENCY:-2} --proxy-headers --forwarded-allow-ips=*"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-5000} --workers ${WEB_CONCURRENCY:-2} --proxy-headers --forwarded-allow-ips=*"]
