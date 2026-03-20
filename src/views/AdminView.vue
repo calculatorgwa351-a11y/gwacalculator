@@ -97,6 +97,24 @@ const openAnalyticsModal = (user: User) => {
   isAnalyticsOpen.value = true
 }
 
+const restoreDemoData = async () => {
+  try {
+    const res = await apiFetch('/api/admin/seed/demo_data?student_count=12', { method: 'POST' })
+    const data = await res.json()
+    if (res.ok) {
+      await fetchAdminData()
+      alert(
+        `Demo data restored.\nCreated students: ${data.created_students ?? 0}\nSeeded grades: ${data.seeded_grades ?? 0}`
+      )
+    } else {
+      alert(`Error: ${data.detail || 'Failed to restore demo data'}`)
+    }
+  } catch (err) {
+    console.error('Failed to restore demo data:', err)
+    alert('An unexpected error occurred. Please try again later.')
+  }
+}
+
 const fixDummyNames = async () => {
   try {
     const res = await apiFetch('/api/admin/seed/filipino_names', { method: 'POST' })
@@ -184,6 +202,12 @@ onMounted(() => {
           <p class="text-slate-500 dark:text-slate-400 font-medium">Academic oversight and student directory</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <button
+            @click="restoreDemoData"
+            class="px-4 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-all"
+          >
+            Restore Demo Data
+          </button>
           <button
             @click="openCreateModal"
             class="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all"

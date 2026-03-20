@@ -46,4 +46,4 @@ FastAPI + Vue 3 application for grade tracking, GWA computation, student feed, a
 
 ## Notes
 - In production mode, startup fails if `SECRET_KEY` is weak or missing.
-- Demo seeding is controlled with `SEED_DEMO_DATA` (defaults to `0` in production compose).
+- Demo seeding is controlled with `SEED_DEMO_DATA` (`render.yaml` defaults it to `1` for demo deployments).
