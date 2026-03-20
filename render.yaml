@@ -23,9 +23,9 @@ services:
       - key: COOKIE_SAMESITE
         value: lax
       - key: INIT_DB_ON_STARTUP
-        value: "1"
+        value: "0"
       - key: SEED_DEMO_DATA
-        value: "1"
+        value: "0"
       - key: DEFAULT_ADMIN_SCHOOL_ID
         value: admin
       - key: DEFAULT_ADMIN_NAME
@@ -33,7 +33,7 @@ services:
       - key: DEFAULT_ADMIN_PASSWORD
         sync: false
       - key: WEB_CONCURRENCY
-        value: "2"
+        value: "1"
     disk:
       name: gwa-data
       mountPath: /data

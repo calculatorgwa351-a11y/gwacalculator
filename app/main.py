@@ -211,7 +211,12 @@ def init_database():
 @app.on_event("startup")
 async def startup_event():
     if settings.init_db_on_startup:
-        init_database()
+        try:
+            init_database()
+        except Exception:
+            logger.exception("Startup DB initialization failed.")
+            if not settings.is_production:
+                raise
     else:
         logger.info("INIT_DB_ON_STARTUP is disabled; skipping startup DB initialization.")
     if not _dist_ready():
