@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
@@ -58,21 +58,52 @@ async def health_check():
 
 
 DIST_DIR = Path("dist")
-if DIST_DIR.exists():
-    @app.get("/")
-    async def serve_index():
-        return FileResponse(DIST_DIR / "index.html")
 
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        if full_path.startswith("api/"):
-            raise HTTPException(status_code=404)
 
-        candidate = DIST_DIR / full_path
-        if candidate.is_file():
-            return FileResponse(candidate)
+def _dist_ready() -> bool:
+    return DIST_DIR.exists() and (DIST_DIR / "index.html").is_file()
 
-        return FileResponse(DIST_DIR / "index.html")
+
+def _frontend_missing_response() -> HTMLResponse:
+    return HTMLResponse(
+        content=(
+            "<!doctype html><html><head><meta charset='utf-8'/>"
+            "<meta name='viewport' content='width=device-width, initial-scale=1'/>"
+            "<title>GWA Calculator</title>"
+            "<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:32px;color:#0f172a}"
+            ".box{max-width:760px;border:1px solid #e2e8f0;border-radius:12px;padding:20px;background:#f8fafc}"
+            "code{background:#e2e8f0;padding:2px 6px;border-radius:6px}</style></head><body>"
+            "<div class='box'><h2>Frontend bundle not found</h2>"
+            "<p>The API is running, but the SPA build files are missing.</p>"
+            "<p>Deploy using Docker (recommended) or run <code>npm run build-only</code> so <code>dist/</code> exists.</p>"
+            "<p>Health endpoint: <a href='/api/health'>/api/health</a></p></div></body></html>"
+        ),
+        status_code=503,
+    )
+
+
+@app.get("/")
+async def serve_index():
+    if not _dist_ready():
+        return _frontend_missing_response()
+    return FileResponse(DIST_DIR / "index.html")
+
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404)
+    if full_path in {"openapi.json", "docs", "redoc"}:
+        raise HTTPException(status_code=404)
+
+    if not _dist_ready():
+        return _frontend_missing_response()
+
+    candidate = DIST_DIR / full_path
+    if candidate.is_file():
+        return FileResponse(candidate)
+
+    return FileResponse(DIST_DIR / "index.html")
 
 
 def init_database():
@@ -183,6 +214,8 @@ async def startup_event():
         init_database()
     else:
         logger.info("INIT_DB_ON_STARTUP is disabled; skipping startup DB initialization.")
+    if not _dist_ready():
+        logger.warning("Frontend dist/ bundle is missing; root path will return a deployment hint page.")
 
 
 if __name__ == "__main__":
