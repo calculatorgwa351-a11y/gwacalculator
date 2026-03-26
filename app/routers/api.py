@@ -126,6 +126,82 @@ def _log_admin_action(
     except Exception:
         db.rollback()
 
+
+def _require_admin_user(request: Request, db: Session) -> User:
+    user = get_current_user(request, db)
+    if not user or not is_admin(user, db):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+def _serialize_grade(grade: SubjectGrade, gwa: Optional[float] = None) -> dict:
+    return {
+        "id": grade.id,
+        "subject": grade.subject,
+        "units": grade.units,
+        "grade": grade.grade,
+        "year": grade.year,
+        "semester": grade.semester,
+        "timestamp": grade.timestamp,
+        "failed": grade.is_failed(),
+        "gwa": gwa,
+    }
+
+
+def _normalize_grade_payload(
+    *,
+    subject: Optional[str],
+    units: Optional[float],
+    grade_value: Optional[float],
+    year: Optional[int],
+    semester: Optional[int],
+    allow_partial: bool = False,
+) -> dict:
+    payload: dict = {}
+
+    if subject is not None:
+        cleaned_subject = subject.strip()
+        if not cleaned_subject:
+            raise HTTPException(status_code=400, detail="Subject is required")
+        payload["subject"] = cleaned_subject
+    elif not allow_partial:
+        raise HTTPException(status_code=400, detail="Subject is required")
+
+    if units is not None:
+        parsed_units = float(units)
+        if parsed_units <= 0:
+            raise HTTPException(status_code=400, detail="Units must be greater than zero")
+        payload["units"] = parsed_units
+    elif not allow_partial:
+        raise HTTPException(status_code=400, detail="Units must be greater than zero")
+
+    if grade_value is not None:
+        parsed_grade = float(grade_value)
+        if parsed_grade < 1.0 or parsed_grade > 5.0:
+            raise HTTPException(status_code=400, detail="Grade must be between 1.0 and 5.0")
+        payload["grade"] = parsed_grade
+    elif not allow_partial:
+        raise HTTPException(status_code=400, detail="Grade must be between 1.0 and 5.0")
+
+    if year is not None:
+        payload["year"] = int(year)
+    elif not allow_partial:
+        payload["year"] = 1
+
+    if semester is not None:
+        payload["semester"] = int(semester)
+    elif not allow_partial:
+        payload["semester"] = 1
+
+    return payload
+
+
+def _get_student_or_404(db: Session, student_id: int) -> User:
+    student = db.query(User).filter(User.id == student_id, User.school_id != "admin").first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student
+
 @router.get("/me")
 async def get_me(request: Request, db: Session = Depends(get_db)):
     """Return the currently authenticated user (derived from JWT cookie)."""
@@ -570,184 +646,180 @@ async def get_grades(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user.id).order_by(SubjectGrade.timestamp.desc()).all()
-    return [{
-        "id": g.id, "subject": g.subject, "units": g.units, "grade": g.grade, 
-        "year": g.year, "semester": g.semester, "timestamp": g.timestamp, "failed": g.is_failed()
-    } for g in grades]
+    return [_serialize_grade(g) for g in grades]
 
 @router.post("/grades", response_model=GradeResponse)
 async def create_grade(request: Request, grade: GradeCreate, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Validation: grade must be between 1.0 and 5.0
-    if grade.grade < 1.0 or grade.grade > 5.0:
-        raise HTTPException(status_code=400, detail="Grade must be between 1.0 and 5.0")
-    
-    # Validation: units must be positive
-    if grade.units <= 0:
-        raise HTTPException(status_code=400, detail="Units must be greater than zero")
-    
-    _invalidate_analytics_caches()
-    
-    new_grade = SubjectGrade(
-        user_id=user.id, subject=grade.subject, units=grade.units, 
-        grade=grade.grade, year=grade.year, semester=grade.semester
-    )
-    db.add(new_grade)
-    db.commit()
-    db.refresh(new_grade)
-    
-    # Return GWA in response for frontend update
-    gwa = compute_gwa_for_user(user.id, db)
-    
-    return {
-        "id": new_grade.id, "subject": new_grade.subject, "units": new_grade.units, 
-        "grade": new_grade.grade, "year": new_grade.year, "semester": new_grade.semester, 
-        "timestamp": new_grade.timestamp, "failed": new_grade.is_failed(),
-        "gwa": gwa
-    }
+    raise HTTPException(status_code=403, detail="Grade management is admin-only")
 
 @router.put("/grades/{grade_id}", response_model=GradeResponse)
 async def update_grade(grade_id: int, request: Request, payload: GradeUpdate, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    grade = db.query(SubjectGrade).filter(SubjectGrade.id == grade_id, SubjectGrade.user_id == user.id).first()
-    if not grade:
-        raise HTTPException(status_code=404, detail="Grade not found")
-
-    if payload.subject is not None:
-        subject = payload.subject.strip()
-        if not subject:
-            raise HTTPException(status_code=400, detail="Subject is required")
-        grade.subject = subject
-
-    if payload.units is not None:
-        if payload.units <= 0:
-            raise HTTPException(status_code=400, detail="Units must be greater than zero")
-        grade.units = payload.units
-
-    if payload.grade is not None:
-        if payload.grade < 1.0 or payload.grade > 5.0:
-            raise HTTPException(status_code=400, detail="Grade must be between 1.0 and 5.0")
-        grade.grade = payload.grade
-
-    if payload.year is not None:
-        grade.year = int(payload.year)
-
-    if payload.semester is not None:
-        grade.semester = int(payload.semester)
-
-    _invalidate_analytics_caches()
-    db.commit()
-    db.refresh(grade)
-
-    gwa = compute_gwa_for_user(user.id, db)
-
-    return {
-        "id": grade.id,
-        "subject": grade.subject,
-        "units": grade.units,
-        "grade": grade.grade,
-        "year": grade.year,
-        "semester": grade.semester,
-        "timestamp": grade.timestamp,
-        "failed": grade.is_failed(),
-        "gwa": gwa,
-    }
+    raise HTTPException(status_code=403, detail="Grade management is admin-only")
 
 @router.delete("/grades/{grade_id}")
 async def delete_grade(grade_id: int, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    grade = db.query(SubjectGrade).filter(SubjectGrade.id == grade_id, SubjectGrade.user_id == user.id).first()
-    if not grade:
-        raise HTTPException(status_code=404, detail="Grade not found")
-
-    db.delete(grade)
-    _invalidate_analytics_caches()
-    db.commit()
-
-    gwa = compute_gwa_for_user(user.id, db)
-    return {"success": True, "gwa": gwa}
+    raise HTTPException(status_code=403, detail="Grade management is admin-only")
 
 @router.post("/grades/bulk")
 async def bulk_create_grades(payload: GradesBulkCreate, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    items = payload.items or []
-    if not items:
-        raise HTTPException(status_code=400, detail="No items provided")
-
-    _invalidate_analytics_caches()
-
-    created = 0
-    try:
-        for it in items:
-            if not it.subject or not it.subject.strip():
-                raise HTTPException(status_code=400, detail="Subject is required")
-            if it.units is None or it.units <= 0:
-                raise HTTPException(status_code=400, detail="Units must be greater than zero")
-            if it.grade is None or it.grade < 1.0 or it.grade > 5.0:
-                raise HTTPException(status_code=400, detail="Grade must be between 1.0 and 5.0")
-
-            db.add(
-                SubjectGrade(
-                    user_id=user.id,
-                    subject=it.subject.strip(),
-                    units=float(it.units),
-                    grade=float(it.grade),
-                    year=int(it.year or 1),
-                    semester=int(it.semester or 1),
-                )
-            )
-            created += 1
-
-        db.commit()
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {e}")
-
-    gwa = compute_gwa_for_user(user.id, db)
-    return {"success": True, "created": created, "gwa": gwa}
+    raise HTTPException(status_code=403, detail="Grade management is admin-only")
 
 @router.get("/grades/export.csv")
 async def export_grades_csv(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    grades = (
-        db.query(SubjectGrade)
-        .filter(SubjectGrade.user_id == user.id)
-        .order_by(SubjectGrade.year.asc(), SubjectGrade.semester.asc(), SubjectGrade.subject.asc())
-        .all()
-    )
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["id", "subject", "units", "grade", "year", "semester", "timestamp"])
-    for g in grades:
-        writer.writerow([g.id, g.subject, g.units, g.grade, g.year, g.semester, g.timestamp.isoformat() if g.timestamp else ""])
-
-    filename = f"grades_{user.school_id}.csv"
-    return _csv_response(filename, output.getvalue())
+    raise HTTPException(status_code=403, detail="Grade management is admin-only")
 
 @router.post("/grades/import")
 async def import_grades_csv(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    raise HTTPException(status_code=403, detail="Grade management is admin-only")
+
+
+@router.get("/admin/student/{student_id}/grades", response_model=List[GradeResponse])
+async def admin_get_student_grades(student_id: int, request: Request, db: Session = Depends(get_db)):
+    _require_admin_user(request, db)
+    student = _get_student_or_404(db, student_id)
+    grades = (
+        db.query(SubjectGrade)
+        .filter(SubjectGrade.user_id == student.id)
+        .order_by(SubjectGrade.year.asc(), SubjectGrade.semester.asc(), SubjectGrade.subject.asc(), SubjectGrade.timestamp.desc())
+        .all()
+    )
+    gwa = compute_gwa_for_user(student.id, db)
+    return [_serialize_grade(grade, gwa) for grade in grades]
+
+
+@router.post("/admin/student/{student_id}/grades", response_model=GradeResponse)
+async def admin_create_student_grade(
+    student_id: int,
+    grade: GradeCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    admin_user = _require_admin_user(request, db)
+    student = _get_student_or_404(db, student_id)
+    normalized = _normalize_grade_payload(
+        subject=grade.subject,
+        units=grade.units,
+        grade_value=grade.grade,
+        year=grade.year,
+        semester=grade.semester,
+    )
+
+    new_grade = SubjectGrade(user_id=student.id, **normalized)
+    db.add(new_grade)
+    _invalidate_analytics_caches()
+    db.commit()
+    db.refresh(new_grade)
+
+    gwa = compute_gwa_for_user(student.id, db)
+    _log_admin_action(
+        db,
+        admin_user,
+        action="grade_create",
+        target_type="user",
+        target_id=student.id,
+        meta={"school_id": student.school_id, "grade_id": new_grade.id, "subject": new_grade.subject},
+    )
+    return _serialize_grade(new_grade, gwa)
+
+
+@router.put("/admin/student/{student_id}/grades/{grade_id}", response_model=GradeResponse)
+async def admin_update_student_grade(
+    student_id: int,
+    grade_id: int,
+    payload: GradeUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    admin_user = _require_admin_user(request, db)
+    student = _get_student_or_404(db, student_id)
+    grade = db.query(SubjectGrade).filter(SubjectGrade.id == grade_id, SubjectGrade.user_id == student.id).first()
+    if not grade:
+        raise HTTPException(status_code=404, detail="Grade not found")
+
+    normalized = _normalize_grade_payload(
+        subject=payload.subject,
+        units=payload.units,
+        grade_value=payload.grade,
+        year=payload.year,
+        semester=payload.semester,
+        allow_partial=True,
+    )
+
+    for key, value in normalized.items():
+        setattr(grade, key, value)
+
+    _invalidate_analytics_caches()
+    db.commit()
+    db.refresh(grade)
+
+    gwa = compute_gwa_for_user(student.id, db)
+    _log_admin_action(
+        db,
+        admin_user,
+        action="grade_update",
+        target_type="user",
+        target_id=student.id,
+        meta={"school_id": student.school_id, "grade_id": grade.id, "subject": grade.subject},
+    )
+    return _serialize_grade(grade, gwa)
+
+
+@router.delete("/admin/student/{student_id}/grades/{grade_id}")
+async def admin_delete_student_grade(student_id: int, grade_id: int, request: Request, db: Session = Depends(get_db)):
+    admin_user = _require_admin_user(request, db)
+    student = _get_student_or_404(db, student_id)
+    grade = db.query(SubjectGrade).filter(SubjectGrade.id == grade_id, SubjectGrade.user_id == student.id).first()
+    if not grade:
+        raise HTTPException(status_code=404, detail="Grade not found")
+
+    subject = grade.subject
+    db.delete(grade)
+    _invalidate_analytics_caches()
+    db.commit()
+
+    gwa = compute_gwa_for_user(student.id, db)
+    _log_admin_action(
+        db,
+        admin_user,
+        action="grade_delete",
+        target_type="user",
+        target_id=student.id,
+        meta={"school_id": student.school_id, "grade_id": grade_id, "subject": subject},
+    )
+    return {"success": True, "gwa": gwa}
+
+
+@router.get("/admin/grades/import-template.csv")
+async def admin_grade_import_template(request: Request, db: Session = Depends(get_db)):
+    _require_admin_user(request, db)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["school_id", "subject", "units", "grade", "year", "semester", "id"])
+    writer.writerow(["20240001", "Data Structures and Algorithms", "3", "1.75", "1", "1", ""])
+    return _csv_response("grades_import_template.csv", output.getvalue())
+
+
+@router.post("/admin/grades/import")
+async def admin_import_grades_csv(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    admin_user = _require_admin_user(request, db)
 
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Please upload a .csv file")
@@ -759,91 +831,114 @@ async def import_grades_csv(request: Request, file: UploadFile = File(...), db: 
         text = raw.decode("utf-8", errors="replace")
 
     reader = csv.DictReader(io.StringIO(text))
-    required = {"subject", "units", "grade", "year", "semester"}
-    fieldnames = [f.strip() for f in (reader.fieldnames or [])]
+    required = {"school_id", "subject", "units", "grade", "year", "semester"}
+    fieldnames = [field.strip() for field in (reader.fieldnames or [])]
     if not reader.fieldnames or not required.issubset(set(fieldnames)):
-        raise HTTPException(status_code=400, detail="CSV must include: subject, units, grade, year, semester (optional: id)")
+        raise HTTPException(
+            status_code=400,
+            detail="CSV must include: school_id, subject, units, grade, year, semester (optional: id)",
+        )
+
+    rows = list(reader)
+    errors = []
+    normalized_rows = []
+
+    for line_number, row in enumerate(rows, start=2):
+        try:
+            school_id = (row.get("school_id") or "").strip()
+            if not school_id:
+                raise ValueError("school_id is required")
+
+            student = db.query(User).filter(User.school_id == school_id, User.school_id != "admin").first()
+            if not student:
+                raise ValueError(f"unknown school_id: {school_id}")
+
+            normalized = _normalize_grade_payload(
+                subject=row.get("subject"),
+                units=float(row.get("units") or 0),
+                grade_value=float(row.get("grade") or 0),
+                year=int(float(row.get("year") or 1)),
+                semester=int(float(row.get("semester") or 1)),
+            )
+
+            raw_id = (row.get("id") or "").strip()
+            target = None
+            if raw_id:
+                try:
+                    grade_id = int(float(raw_id))
+                except Exception as exc:
+                    raise ValueError(f"invalid id: {raw_id}") from exc
+
+                target = db.query(SubjectGrade).filter(SubjectGrade.id == grade_id).first()
+                if not target:
+                    raise ValueError(f"grade id not found: {grade_id}")
+                if target.user_id != student.id:
+                    raise ValueError(f"grade id {grade_id} does not belong to school_id {school_id}")
+
+            normalized_rows.append(
+                {
+                    "line": line_number,
+                    "school_id": school_id,
+                    "student": student,
+                    "target": target,
+                    **normalized,
+                }
+            )
+        except HTTPException as exc:
+            errors.append({"line": line_number, "error": exc.detail})
+        except Exception as exc:
+            errors.append({"line": line_number, "error": str(exc)})
+
+    if errors:
+        return JSONResponse(content={"success": False, "inserted": 0, "updated": 0, "errors": errors}, status_code=400)
 
     inserted = 0
     updated = 0
-    errors = []
-
-    _invalidate_analytics_caches()
-
     try:
-        for idx, row in enumerate(reader, start=2):
-            try:
-                subject = (row.get("subject") or "").strip()
-                if not subject:
-                    raise ValueError("subject is required")
-
-                units = float(row.get("units") or 0)
-                if units <= 0:
-                    raise ValueError("units must be > 0")
-
-                grade_value = float(row.get("grade") or 0)
-                if grade_value < 1.0 or grade_value > 5.0:
-                    raise ValueError("grade must be between 1.0 and 5.0")
-
-                year = int(float(row.get("year") or 1))
-                semester = int(float(row.get("semester") or 1))
-
-                raw_id = (row.get("id") or "").strip()
-                target = None
-                if raw_id:
-                    try:
-                        gid = int(float(raw_id))
-                        target = db.query(SubjectGrade).filter(SubjectGrade.id == gid, SubjectGrade.user_id == user.id).first()
-                    except Exception:
-                        target = None
-
-                if target is None:
-                    target = (
-                        db.query(SubjectGrade)
-                        .filter(
-                            SubjectGrade.user_id == user.id,
-                            SubjectGrade.subject == subject,
-                            SubjectGrade.year == year,
-                            SubjectGrade.semester == semester,
-                        )
-                        .first()
+        for item in normalized_rows:
+            target = item["target"]
+            student = item["student"]
+            if target is None:
+                target = (
+                    db.query(SubjectGrade)
+                    .filter(
+                        SubjectGrade.user_id == student.id,
+                        SubjectGrade.subject == item["subject"],
+                        SubjectGrade.year == item["year"],
+                        SubjectGrade.semester == item["semester"],
                     )
+                    .first()
+                )
 
-                if target:
-                    target.subject = subject
-                    target.units = units
-                    target.grade = grade_value
-                    target.year = year
-                    target.semester = semester
-                    updated += 1
-                else:
-                    db.add(
-                        SubjectGrade(
-                            user_id=user.id,
-                            subject=subject,
-                            units=units,
-                            grade=grade_value,
-                            year=year,
-                            semester=semester,
-                        )
+            if target:
+                target.subject = item["subject"]
+                target.units = item["units"]
+                target.grade = item["grade"]
+                target.year = item["year"]
+                target.semester = item["semester"]
+                updated += 1
+            else:
+                db.add(
+                    SubjectGrade(
+                        user_id=student.id,
+                        subject=item["subject"],
+                        units=item["units"],
+                        grade=item["grade"],
+                        year=item["year"],
+                        semester=item["semester"],
                     )
-                    inserted += 1
-            except Exception as e:
-                errors.append({"line": idx, "error": str(e)})
-                if len(errors) >= 50:
-                    break
+                )
+                inserted += 1
 
-        if errors:
-            db.rollback()
-            return JSONResponse(content={"success": False, "inserted": inserted, "updated": updated, "errors": errors}, status_code=400)
-
+        _invalidate_analytics_caches()
         db.commit()
-    except Exception as e:
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Import failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Import failed: {exc}")
 
-    gwa = compute_gwa_for_user(user.id, db)
-    return {"success": True, "inserted": inserted, "updated": updated, "gwa": gwa}
+    result = {"inserted": inserted, "updated": updated, "errors": []}
+    _log_admin_action(db, admin_user, action="grade_import", meta=result)
+    return {"success": True, **result}
 
 @router.get("/analytics/semester_gwa")
 async def get_semester_gwa(request: Request, db: Session = Depends(get_db)):

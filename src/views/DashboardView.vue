@@ -185,13 +185,13 @@ const achievements = computed(() => {
               <div class="max-w-md w-full bg-white/80 dark:bg-slate-900/70 backdrop-blur rounded-[2rem] border border-slate-100 dark:border-slate-700 p-6 text-center shadow-lg">
                 <div class="text-sm font-black text-slate-900 dark:text-white">No grades yet</div>
                 <div class="mt-1 text-sm text-slate-500 dark:text-slate-400 font-medium">
-                  Add your subjects to calculate your GWA and check Latin honors eligibility.
+                  Your grades will appear here automatically once the admin uploads your academic record.
                 </div>
                 <button
                   class="mt-4 px-5 py-3 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-blue-700 transition-all active:scale-95"
                   @click="setView('grades')"
                 >
-                  Add Subject
+                  View Evaluation
                 </button>
               </div>
             </div>
@@ -208,7 +208,7 @@ const achievements = computed(() => {
                 {{ honorsBadge }}
               </div>
               <div v-else class="text-xs font-bold opacity-80 leading-relaxed">
-                {{ summary?.honors?.reason ?? 'Add your subjects to see your Latin honors eligibility.' }}
+                {{ summary?.honors?.reason ?? 'Your honors eligibility updates automatically after the admin uploads your grades.' }}
               </div>
             </div>
 

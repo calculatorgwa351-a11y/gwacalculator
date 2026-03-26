@@ -7,6 +7,7 @@ import StudentCreateModal from '@/components/StudentCreateModal.vue'
 import AdminAnalyticsCharts from '@/components/AdminAnalyticsCharts.vue'
 import AdminAuditPanel from '@/components/AdminAuditPanel.vue'
 import AdminReportsPanel from '@/components/AdminReportsPanel.vue'
+import AdminGradeManagerModal from '@/components/AdminGradeManagerModal.vue'
 import type { User, Analytics } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
@@ -21,6 +22,8 @@ const selectedUser = ref<User | null>(null)
 const isAnalyticsOpen = ref(false)
 const analyticsStudentId = ref<number | null>(null)
 const isCreateOpen = ref(false)
+const isGradeManagerOpen = ref(false)
+const selectedGradeStudent = ref<User | null>(null)
 const activeTab = ref<'overview' | 'analytics' | 'audit' | 'reports'>('overview')
 const resetMessage = ref('')
 const authStore = useAuthStore()
@@ -95,6 +98,24 @@ const openCreateModal = () => {
 const openAnalyticsModal = (user: User) => {
   analyticsStudentId.value = user.id
   isAnalyticsOpen.value = true
+}
+
+const openGradeManager = (user: User) => {
+  selectedGradeStudent.value = user
+  isGradeManagerOpen.value = true
+}
+
+const closeGradeManager = async () => {
+  isGradeManagerOpen.value = false
+  selectedGradeStudent.value = null
+  await fetchAdminData()
+}
+
+const handleManageGradesFromAnalytics = () => {
+  const student = students.value.find((entry) => entry.id === analyticsStudentId.value) || null
+  if (!student) return
+  isAnalyticsOpen.value = false
+  openGradeManager(student)
 }
 
 const restoreDemoData = async () => {
@@ -317,6 +338,9 @@ onMounted(() => {
                       <button @click="openAnalyticsModal(s)" class="px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all active:scale-95">
                         Analytics
                       </button>
+                      <button @click="openGradeManager(s)" class="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all active:scale-95">
+                        Manage Grades
+                      </button>
                       <button @click="resetPassword(s)" class="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all active:scale-95">
                         Reset Pass
                       </button>
@@ -350,8 +374,19 @@ onMounted(() => {
 
     <StudentEditModal :is-open="isModalOpen" :user="selectedUser" @close="isModalOpen = false" @save="handleSaveStudent" />
 
-    <StudentAnalyticsModal :is-open="isAnalyticsOpen" :student-id="analyticsStudentId" @close="isAnalyticsOpen = false" />
+    <StudentAnalyticsModal
+      :is-open="isAnalyticsOpen"
+      :student-id="analyticsStudentId"
+      @close="isAnalyticsOpen = false"
+      @manage-grades="handleManageGradesFromAnalytics"
+    />
 
     <StudentCreateModal v-if="isCreateOpen" @close="isCreateOpen = false" @save="handleCreateStudent" />
+
+    <AdminGradeManagerModal
+      :is-open="isGradeManagerOpen"
+      :student="selectedGradeStudent"
+      @close="closeGradeManager"
+    />
   </div>
 </template>

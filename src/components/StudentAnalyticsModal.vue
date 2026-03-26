@@ -9,7 +9,7 @@ const props = defineProps<{
   studentId: number | null
 }>()
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'manage-grades'])
 
 const isLoading = ref(false)
 const detail = ref<AdminStudentDetail | null>(null)
@@ -170,12 +170,21 @@ onBeforeUnmount(() => {
             <span class="text-slate-400 dark:text-slate-500 font-black text-sm ml-2">{{ detail?.school_id }}</span>
           </div>
         </div>
-        <button
-          @click="emit('close')"
-          class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
-        >
-          Close
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            v-if="props.studentId"
+            @click="emit('manage-grades')"
+            class="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all"
+          >
+            Manage Grades
+          </button>
+          <button
+            @click="emit('close')"
+            class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+          >
+            Close
+          </button>
+        </div>
       </div>
 
       <div class="p-8 space-y-8">

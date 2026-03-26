@@ -51,6 +51,18 @@ export interface GradeUpsert {
   semester: number
 }
 
+export interface GradeImportError {
+  line: number
+  error: string
+}
+
+export interface AdminGradeImportResponse {
+  success: boolean
+  inserted: number
+  updated: number
+  errors: GradeImportError[]
+}
+
 export interface Analytics {
   average_gwa: number | null
   failure_rate: number | null

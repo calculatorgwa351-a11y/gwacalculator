@@ -49,7 +49,7 @@ const handleSave = () => {
   <div v-if="isOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in">
     <div class="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700 w-full max-w-md">
       <h2 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight mb-6">
-        {{ props.grade ? 'Edit Subject' : 'Add Subject' }}
+        {{ props.grade ? 'Edit Grade' : 'Add Grade' }}
       </h2>
 
       <form @submit.prevent="handleSave" class="space-y-6">
@@ -83,7 +83,7 @@ const handleSave = () => {
         <div class="flex justify-end gap-4 pt-6 border-t border-slate-50 dark:border-slate-700">
           <button type="button" @click="emit('close')" class="px-6 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">Cancel</button>
           <button type="submit" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all">
-            {{ props.grade ? 'Save Changes' : 'Add Subject' }}
+            {{ props.grade ? 'Save Changes' : 'Add Grade' }}
           </button>
         </div>
       </form>
