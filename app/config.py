@@ -6,6 +6,11 @@ from functools import lru_cache
 from typing import Optional
 from urllib.parse import quote_plus
 
+from dotenv import load_dotenv
+
+
+load_dotenv(override=False)
+
 
 def _as_bool(value: Optional[str], default: bool) -> bool:
     if value is None:
@@ -82,6 +87,14 @@ class Settings:
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def database_backend(self) -> str:
+        if self.database_url.startswith("postgresql"):
+            return "postgresql"
+        if self.database_url.startswith("sqlite"):
+            return "sqlite"
+        return "unknown"
 
     def validate(self) -> None:
         insecure_secret_values = {

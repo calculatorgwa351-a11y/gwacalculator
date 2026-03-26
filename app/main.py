@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import inspect, text
+from sqlalchemy.engine import make_url
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
@@ -55,7 +56,24 @@ app.include_router(api.router)
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "environment": settings.app_env}
+    database_target = "unknown"
+    try:
+        parsed = make_url(settings.database_url)
+        if settings.database_backend == "sqlite":
+            database_target = parsed.database or "sqlite"
+        else:
+            host = parsed.host or ""
+            database = parsed.database or ""
+            database_target = f"{host}/{database}".strip("/") or settings.database_backend
+    except Exception:
+        database_target = settings.database_backend
+
+    return {
+        "status": "ok",
+        "environment": settings.app_env,
+        "database_backend": settings.database_backend,
+        "database_target": database_target,
+    }
 
 
 DIST_DIR = Path("dist")
@@ -231,6 +249,18 @@ def run_lightweight_migrations():
 
 @app.on_event("startup")
 async def startup_event():
+    try:
+        parsed = make_url(settings.database_url)
+        if settings.database_backend == "sqlite":
+            database_target = parsed.database or "sqlite"
+        else:
+            host = parsed.host or ""
+            database = parsed.database or ""
+            database_target = f"{host}/{database}".strip("/") or settings.database_backend
+    except Exception:
+        database_target = settings.database_backend
+
+    logger.info("Database backend configured: %s (%s)", settings.database_backend, database_target)
     run_lightweight_migrations()
     if settings.init_db_on_startup:
         try:
