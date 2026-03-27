@@ -56,7 +56,7 @@ async def health_check():
 @app.post("/api/login")
 async def login(credentials: Dict[str, str]):
     # Simple mock authentication
-    if credentials.get("username") == "admin" and credentials.get("password") == "adminpass":
+    if credentials.get("username") == "admin" and credentials.get("password") == "Strongadminpass123!":
         return {"access_token": "mock_admin_token", "token_type": "bearer", "user": MOCK_USERS[0]}
     elif credentials.get("username", "").startswith("2024") and credentials.get("password") == "password123":
         return {"access_token": "mock_student_token", "token_type": "bearer", "user": MOCK_USERS[1]}

@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import DashboardView from '../views/DashboardView.vue'
 import AdminView from '../views/AdminView.vue'
-import RegisterView from '../views/RegisterView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -35,9 +34,7 @@ const router = createRouter({
     },
     {
       path: '/register',
-      name: 'register',
-      component: RegisterView,
-      meta: { guestOnly: true }
+      redirect: '/'
     }
   ]
 })

@@ -105,6 +105,13 @@ def _csv_response(filename: str, content: str) -> Response:
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
+
+def _normalize_csv_row_keys(row: dict) -> dict:
+    normalized = {}
+    for key, value in row.items():
+        normalized[(key or "").strip().lower()] = value
+    return normalized
+
 def _log_admin_action(
     db: Session,
     admin_user: User,
@@ -373,31 +380,11 @@ async def api_logout():
 
 @router.post("/register")
 async def api_register(request: Request, db: Session = Depends(get_db)):
-    """Register a new student account (FormData)."""
-    try:
-        body = await request.form()
-        name = (body.get("name") or "").strip()
-        school_id = (body.get("school_id") or "").strip()
-        password = body.get("password") or ""
-    except Exception:
-        return JSONResponse(content={"error": "Invalid request format"}, status_code=400)
-
-    if not name or not school_id or not password:
-        return JSONResponse(content={"error": "All fields are required"}, status_code=400)
-
-    if school_id.lower() == "admin":
-        return JSONResponse(content={"error": "School ID not allowed"}, status_code=400)
-
-    existing = db.query(User).filter(User.school_id == school_id).first()
-    if existing:
-        return JSONResponse(content={"error": "School ID already exists"}, status_code=400)
-
-    new_user = User(school_id=school_id, name=name)
-    new_user.set_password(password)
-    db.add(new_user)
-    db.commit()
-
-    return JSONResponse(content={"success": True})
+    """Student self-registration is disabled. Admins create student accounts."""
+    return JSONResponse(
+        content={"error": "Student self-registration is disabled. Please contact the admin."},
+        status_code=403,
+    )
 
 @router.get("/posts")
 async def get_posts(request: Request, page: int = 1, limit: int = 10, db: Session = Depends(get_db)):
@@ -813,7 +800,55 @@ async def admin_grade_import_template(request: Request, db: Session = Depends(ge
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["school_id", "subject", "units", "grade", "year", "semester", "id"])
-    writer.writerow(["20240001", "Data Structures and Algorithms", "3", "1.75", "1", "1", ""])
+
+    students = (
+        db.query(User)
+        .filter(User.school_id != "admin")
+        .order_by(User.school_id.asc())
+        .all()
+    )
+
+    if not students:
+        writer.writerow(["20240001", "Data Structures and Algorithms", "3", "1.75", "1", "1", ""])
+        return _csv_response("grades_import_template.csv", output.getvalue())
+
+    student_ids = [student.id for student in students]
+    grades = (
+        db.query(SubjectGrade)
+        .filter(SubjectGrade.user_id.in_(student_ids))
+        .order_by(
+            SubjectGrade.user_id.asc(),
+            SubjectGrade.year.asc(),
+            SubjectGrade.semester.asc(),
+            SubjectGrade.subject.asc(),
+        )
+        .all()
+        if student_ids
+        else []
+    )
+
+    grades_by_student: dict[int, list[SubjectGrade]] = {student.id: [] for student in students}
+    for grade in grades:
+        grades_by_student.setdefault(grade.user_id, []).append(grade)
+
+    for student in students:
+        student_grades = grades_by_student.get(student.id, [])
+        if student_grades:
+            for grade in student_grades:
+                writer.writerow(
+                    [
+                        student.school_id,
+                        grade.subject,
+                        grade.units,
+                        grade.grade,
+                        grade.year,
+                        grade.semester,
+                        grade.id,
+                    ]
+                )
+        else:
+            writer.writerow([student.school_id, "", "", "", "", "", ""])
+
     return _csv_response("grades_import_template.csv", output.getvalue())
 
 
@@ -832,8 +867,8 @@ async def admin_import_grades_csv(request: Request, file: UploadFile = File(...)
 
     reader = csv.DictReader(io.StringIO(text))
     required = {"school_id", "subject", "units", "grade", "year", "semester"}
-    fieldnames = [field.strip() for field in (reader.fieldnames or [])]
-    if not reader.fieldnames or not required.issubset(set(fieldnames)):
+    fieldnames = {(field or "").strip().lower() for field in (reader.fieldnames or [])}
+    if not reader.fieldnames or not required.issubset(fieldnames):
         raise HTTPException(
             status_code=400,
             detail="CSV must include: school_id, subject, units, grade, year, semester (optional: id)",
@@ -845,7 +880,8 @@ async def admin_import_grades_csv(request: Request, file: UploadFile = File(...)
 
     for line_number, row in enumerate(rows, start=2):
         try:
-            school_id = (row.get("school_id") or "").strip()
+            normalized_row = _normalize_csv_row_keys(row)
+            school_id = (normalized_row.get("school_id") or "").strip()
             if not school_id:
                 raise ValueError("school_id is required")
 
@@ -854,14 +890,14 @@ async def admin_import_grades_csv(request: Request, file: UploadFile = File(...)
                 raise ValueError(f"unknown school_id: {school_id}")
 
             normalized = _normalize_grade_payload(
-                subject=row.get("subject"),
-                units=float(row.get("units") or 0),
-                grade_value=float(row.get("grade") or 0),
-                year=int(float(row.get("year") or 1)),
-                semester=int(float(row.get("semester") or 1)),
+                subject=normalized_row.get("subject"),
+                units=float(normalized_row.get("units") or 0),
+                grade_value=float(normalized_row.get("grade") or 0),
+                year=int(float(normalized_row.get("year") or 1)),
+                semester=int(float(normalized_row.get("semester") or 1)),
             )
 
-            raw_id = (row.get("id") or "").strip()
+            raw_id = (normalized_row.get("id") or "").strip()
             target = None
             if raw_id:
                 try:
@@ -894,10 +930,12 @@ async def admin_import_grades_csv(request: Request, file: UploadFile = File(...)
 
     inserted = 0
     updated = 0
+    affected_school_ids = set()
     try:
         for item in normalized_rows:
             target = item["target"]
             student = item["student"]
+            affected_school_ids.add(student.school_id)
             if target is None:
                 target = (
                     db.query(SubjectGrade)
@@ -936,7 +974,12 @@ async def admin_import_grades_csv(request: Request, file: UploadFile = File(...)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Import failed: {exc}")
 
-    result = {"inserted": inserted, "updated": updated, "errors": []}
+    result = {
+        "inserted": inserted,
+        "updated": updated,
+        "students_affected": len(affected_school_ids),
+        "errors": [],
+    }
     _log_admin_action(db, admin_user, action="grade_import", meta=result)
     return {"success": True, **result}
 

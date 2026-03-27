@@ -10,6 +10,7 @@ const schoolId = ref('')
 const password = ref('')
 const error = ref('')
 const isLoading = ref(false)
+const showPassword = ref(false)
 
 const handleLogin = async () => {
   if (!schoolId.value || !password.value) {
@@ -26,13 +27,18 @@ const handleLogin = async () => {
     formData.append('password', password.value)
 
     const res = await apiFetch('/api/login', { method: 'POST', body: formData, skipAuthError: true })
-
     const data = await res.json()
 
     if (res.ok && data.success) {
-      // Refresh auth state so route guards can see the logged-in user.
+      const redirectTarget =
+        typeof data.redirect === 'string'
+          ? data.redirect
+          : data.is_admin
+            ? '/admin'
+            : '/dashboard'
+
       await authStore.fetchMe()
-      router.push(authStore.isAdmin ? '/admin' : '/dashboard')
+      router.push(redirectTarget)
     } else {
       error.value = data.error || 'Invalid credentials'
     }
@@ -54,6 +60,9 @@ const handleLogin = async () => {
         </div>
         <h1 class="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Welcome Back</h1>
         <p class="mt-2 text-slate-500 dark:text-slate-400 font-medium">Sign in to your academic dashboard</p>
+        <p class="mt-3 text-sm text-slate-500 dark:text-slate-400">
+          Student accounts are created by the admin. Use the school ID and password assigned to you.
+        </p>
       </div>
 
       <div class="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700">
@@ -64,28 +73,38 @@ const handleLogin = async () => {
 
           <div class="space-y-2">
             <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">School ID</label>
-            <input 
+            <input
               v-model="schoolId"
-              type="text" 
+              type="text"
               required
               class="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none transition-all font-medium dark:text-white"
-              placeholder="e.g. 20240001"
+              placeholder="e.g. admin or 20240001"
             >
           </div>
 
           <div class="space-y-2">
             <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">Password</label>
-            <input 
-              v-model="password"
-              type="password" 
-              required
-              class="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none transition-all font-medium dark:text-white"
-              placeholder="••••••••"
-            >
+            <div class="relative">
+              <input
+                v-model="password"
+                :type="showPassword ? 'text' : 'password'"
+                required
+                class="w-full px-5 py-4 pr-28 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-500/10 outline-none transition-all font-medium dark:text-white"
+                placeholder="Enter your password"
+              >
+              <button
+                type="button"
+                class="absolute inset-y-0 right-3 my-2 px-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-black uppercase tracking-[0.16em] text-slate-600 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+                @click="showPassword = !showPassword"
+                :aria-label="showPassword ? 'Hide password' : 'Show password'"
+              >
+                {{ showPassword ? 'Hide' : 'View' }}
+              </button>
+            </div>
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             :disabled="isLoading"
             class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
           >
@@ -95,9 +114,9 @@ const handleLogin = async () => {
         </form>
 
         <div class="mt-8 pt-6 border-t border-slate-50 dark:border-slate-700 text-center">
-          <router-link to="/register" class="text-sm font-bold text-slate-400 hover:text-blue-600 transition-colors">
-            Don't have an account? <span class="text-blue-600">Register now</span>
-          </router-link>
+          <p class="text-sm font-semibold text-slate-500 dark:text-slate-400">
+            Need an account? Please contact the admin to register your student profile.
+          </p>
         </div>
       </div>
     </div>

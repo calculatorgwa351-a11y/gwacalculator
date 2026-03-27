@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN adduser --disabled-password --gecos "" appuser
+RUN mkdir -p /data && chown -R appuser:appuser /data
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --default-timeout=180 --retries 8 -r requirements.txt
@@ -36,7 +37,7 @@ COPY init.py ./init.py
 COPY gunicorn.conf.py ./gunicorn.conf.py
 COPY --from=frontend-builder /app/frontend/dist ./dist
 
-RUN chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app /data
 USER appuser
 
 EXPOSE 5000

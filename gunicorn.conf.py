@@ -2,7 +2,9 @@ import os
 
 
 bind = f"0.0.0.0:{os.getenv('PORT', '5000')}"
-workers = int(os.getenv("WEB_CONCURRENCY", "2"))
+database_url = os.getenv("DATABASE_URL", "")
+default_workers = "1" if database_url.startswith("sqlite") else "2"
+workers = int(os.getenv("WEB_CONCURRENCY", default_workers))
 worker_class = "uvicorn.workers.UvicornWorker"
 timeout = int(os.getenv("GUNICORN_TIMEOUT", "120"))
 graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "30"))

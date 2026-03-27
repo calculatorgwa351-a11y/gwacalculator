@@ -151,7 +151,7 @@ def get_settings() -> Settings:
         default_admin_name=os.getenv("DEFAULT_ADMIN_NAME", "Administrator").strip() or "Administrator",
         default_admin_password=os.getenv(
             "DEFAULT_ADMIN_PASSWORD",
-            "" if app_env == "production" else "adminpass",
+            "" if app_env == "production" else "Strongadminpass123!",
         ),
         db_pool_size=_as_int(os.getenv("DB_POOL_SIZE"), 10),
         db_max_overflow=_as_int(os.getenv("DB_MAX_OVERFLOW"), 20),

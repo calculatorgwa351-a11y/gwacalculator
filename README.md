@@ -45,7 +45,7 @@ FastAPI + Vue 3 application for grade tracking, GWA computation, student feed, a
 - The Docker image now starts through `gunicorn` + `uvicorn` workers for a more production-ready FastAPI runtime.
 
 ## Default Demo Credentials
-- Admin: `admin / adminpass` (development/demo only)
+- Admin: `admin / Strongadminpass123!` (development/demo only)
 - Seeded students: `2024xxxx / password123`
 
 ## Supabase Migration

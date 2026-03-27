@@ -60,6 +60,7 @@ export interface AdminGradeImportResponse {
   success: boolean
   inserted: number
   updated: number
+  students_affected?: number
   errors: GradeImportError[]
 }
 

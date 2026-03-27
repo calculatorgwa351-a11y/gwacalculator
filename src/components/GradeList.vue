@@ -27,7 +27,7 @@ const yearLabels: Record<number, string> = {
   4: 'Fourth Year'
 }
 
-const formatGwa = (gwa: number | null) => (typeof gwa === 'number' ? gwa.toFixed(3) : '—')
+const formatGwa = (gwa: number | null) => (typeof gwa === 'number' ? gwa.toFixed(3) : 'N/A')
 
 const calculateWeightedGwa = (items: SubjectGrade[]) => {
   const validItems = items.filter((item) => typeof item.units === 'number' && typeof item.grade === 'number')
@@ -154,7 +154,7 @@ const semesterSummaries = computed<GwaSummaryCard[]>(() => {
       const feedback = getSemesterFeedback(gwa)
       return {
         key,
-        label: `${yearLabels[year] || `Year ${year}`} • ${semester}${semester === 1 ? 'st' : semester === 2 ? 'nd' : semester === 3 ? 'rd' : 'th'} Semester`,
+        label: `${yearLabels[year] || `Year ${year}`} - ${semester}${semester === 1 ? 'st' : semester === 2 ? 'nd' : semester === 3 ? 'rd' : 'th'} Semester`,
         gwa,
         count: items.length,
         band: feedback.band,
@@ -225,7 +225,7 @@ onMounted(() => {
   <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Recorded Grades</h3>
+        <h3 class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Recorded Grades</h3>
         <p class="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
           Grades are managed by the admin and appear here automatically once uploaded.
         </p>
@@ -250,7 +250,7 @@ onMounted(() => {
     <template v-else>
       <section class="space-y-4">
         <div>
-          <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Per Semester GWA</h3>
+          <h3 class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Per Semester GWA</h3>
           <p class="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
             Every semester result comes with a quick performance message to help you track your progress.
           </p>
@@ -263,7 +263,7 @@ onMounted(() => {
           >
             <div class="flex items-start justify-between gap-4">
               <div>
-                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{{ semester.label }}</div>
+                <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">{{ semester.label }}</div>
                 <div class="mt-2 text-3xl font-black text-slate-900 dark:text-white tabular-nums">{{ formatGwa(semester.gwa) }}</div>
               </div>
               <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
@@ -271,7 +271,7 @@ onMounted(() => {
               </div>
             </div>
             <div :class="['rounded-2xl border px-4 py-3 text-sm font-semibold leading-relaxed', toneClass(semester.band)]">
-              <div class="text-[10px] font-black uppercase tracking-widest mb-1">{{ semester.band }}</div>
+                  <div class="text-xs font-black uppercase tracking-[0.16em] mb-1">{{ semester.band }}</div>
               <div>{{ semester.message }}</div>
             </div>
           </div>
@@ -280,7 +280,7 @@ onMounted(() => {
 
       <section class="space-y-4">
         <div>
-          <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Yearly GWA</h3>
+          <h3 class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Yearly GWA</h3>
           <p class="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
             Your first year to fourth year standing is computed automatically from the uploaded semester grades.
           </p>
@@ -291,10 +291,10 @@ onMounted(() => {
             :key="year.key"
             class="bg-white dark:bg-slate-800 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-3"
           >
-            <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{{ year.label }}</div>
+            <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">{{ year.label }}</div>
             <div class="text-3xl font-black text-slate-900 dark:text-white tabular-nums">{{ formatGwa(year.gwa) }}</div>
             <div :class="['rounded-2xl border px-4 py-3 text-sm font-semibold leading-relaxed', toneClass(year.band)]">
-              <div class="text-[10px] font-black uppercase tracking-widest mb-1">{{ year.band }}</div>
+              <div class="text-xs font-black uppercase tracking-[0.16em] mb-1">{{ year.band }}</div>
               <div>{{ year.message }}</div>
             </div>
           </div>
@@ -304,44 +304,44 @@ onMounted(() => {
       <section class="bg-gradient-to-br from-slate-900 to-blue-950 dark:from-slate-950 dark:to-slate-900 text-white p-6 rounded-[2rem] shadow-xl shadow-slate-900/20 space-y-5">
         <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
           <div>
-            <div class="text-[10px] font-black uppercase tracking-[0.2em] text-blue-200/80">Overall GWA</div>
+            <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">Overall GWA</div>
             <div class="mt-2 text-5xl font-black tracking-tight tabular-nums">{{ formatGwa(overallSummary.gwa) }}</div>
-            <div class="mt-2 text-sm font-semibold text-blue-100/90">{{ overallSummary.count }} uploaded subjects included in this result.</div>
+            <div class="mt-3 text-base font-medium text-blue-50/90 leading-relaxed">{{ overallSummary.count }} uploaded subjects included in this result.</div>
           </div>
           <div class="lg:max-w-sm w-full rounded-[1.5rem] bg-white/10 border border-white/10 p-4">
-            <div class="text-[10px] font-black uppercase tracking-widest text-blue-200/80">Latin Honors Standing</div>
+            <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">Latin Honors Standing</div>
             <div class="mt-2 text-2xl font-black">{{ honorsTitle }}</div>
-            <div class="mt-2 text-sm leading-relaxed text-blue-50/90">{{ honorsReason }}</div>
-            <div class="mt-3 text-[10px] font-black uppercase tracking-widest text-blue-200/80">
+            <div class="mt-3 text-base leading-relaxed text-blue-50/90">{{ honorsReason }}</div>
+            <div class="mt-3 text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">
               Next target: {{ nextHonorsTarget }}
             </div>
           </div>
         </div>
 
         <div class="rounded-[1.5rem] bg-white/10 border border-white/10 px-5 py-4">
-          <div class="text-[10px] font-black uppercase tracking-widest text-blue-200/80 mb-2">{{ overallSummary.band }}</div>
-          <div class="text-sm md:text-base font-semibold leading-relaxed">{{ overallSummary.message }}</div>
+          <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80 mb-2">{{ overallSummary.band }}</div>
+          <div class="text-base md:text-lg font-semibold leading-relaxed">{{ overallSummary.message }}</div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
           <div class="rounded-2xl bg-white/10 px-4 py-3">
-            <div class="text-[10px] font-black uppercase tracking-widest text-blue-200/80">Cum Laude</div>
-            <div class="mt-1 font-semibold">1.46 – 1.75</div>
+            <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">Cum Laude</div>
+            <div class="mt-1 font-semibold">1.46 to 1.75</div>
           </div>
           <div class="rounded-2xl bg-white/10 px-4 py-3">
-            <div class="text-[10px] font-black uppercase tracking-widest text-blue-200/80">Magna Cum Laude</div>
-            <div class="mt-1 font-semibold">1.21 – 1.45</div>
+            <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">Magna Cum Laude</div>
+            <div class="mt-1 font-semibold">1.21 to 1.45</div>
           </div>
           <div class="rounded-2xl bg-white/10 px-4 py-3">
-            <div class="text-[10px] font-black uppercase tracking-widest text-blue-200/80">Summa Cum Laude</div>
-            <div class="mt-1 font-semibold">1.00 – 1.20</div>
+            <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">Summa Cum Laude</div>
+            <div class="mt-1 font-semibold">1.00 to 1.20</div>
           </div>
         </div>
       </section>
 
       <section class="space-y-4">
         <div>
-          <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Uploaded Subject Grades</h3>
+          <h3 class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Uploaded Subject Grades</h3>
           <p class="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
             These are the read-only grades uploaded by the admin for each subject and semester.
           </p>
@@ -355,12 +355,12 @@ onMounted(() => {
               </div>
               <div>
                 <div class="font-bold text-slate-800 dark:text-white">{{ grade.subject }}</div>
-                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
                   Units: {{ grade.units }} | {{ grade.year }} Year, {{ grade.semester }} Semester
                 </div>
               </div>
             </div>
-            <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-300">
+            <div class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-xs font-black uppercase tracking-[0.16em] text-slate-600 dark:text-slate-200">
               Read Only
             </div>
           </div>

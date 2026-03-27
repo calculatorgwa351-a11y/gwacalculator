@@ -171,7 +171,7 @@ const overallMotivationalMessage = computed(() => {
   <div class="flex min-h-screen">
     <Sidebar :active-view="activeView" @view-change="setView" />
 
-    <main class="flex-1 p-8 overflow-y-auto">
+    <main class="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950">
       <header class="flex items-center justify-between mb-8">
         <div>
           <h1 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -195,7 +195,7 @@ const overallMotivationalMessage = computed(() => {
       <div v-show="activeView === 'overview'" class="space-y-8 animate-in">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none relative overflow-hidden">
-            <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-6">Performance History</h3>
+            <h3 class="text-xs font-black text-slate-500 dark:text-slate-300 uppercase tracking-[0.16em] mb-6">Performance History</h3>
             <GwaChart v-if="user" :user-id="user.id" />
 
             <div
@@ -219,53 +219,53 @@ const overallMotivationalMessage = computed(() => {
 
           <div class="space-y-8">
             <div class="bg-gradient-to-br from-blue-600 to-blue-800 p-8 rounded-[2.5rem] text-white shadow-xl shadow-blue-500/20">
-              <h3 class="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">Current GWA</h3>
+              <h3 class="text-xs font-black uppercase tracking-[0.16em] text-blue-100/80 mb-2">Current GWA</h3>
               <div class="text-5xl font-black tracking-tight mb-4 tabular-nums">
-                {{ summary?.gwa?.toFixed(3) ?? '—' }}
+                {{ summary?.gwa?.toFixed(3) ?? 'N/A' }}
               </div>
-              <div v-if="honorsBadge" class="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest">
+              <div v-if="honorsBadge" class="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-xs font-black uppercase tracking-[0.16em]">
                 <span class="w-2 h-2 bg-emerald-400 rounded-full"></span>
                 {{ honorsBadge }}
               </div>
-              <div class="mt-3 text-xs font-bold opacity-90 leading-relaxed">
+              <div class="mt-4 text-sm font-semibold text-blue-50 leading-relaxed">
                 {{ overallMotivationalMessage }}
               </div>
-              <div v-if="!honorsBadge" class="mt-3 text-xs font-bold opacity-80 leading-relaxed">
+              <div v-if="!honorsBadge" class="mt-3 text-sm font-medium text-blue-100/90 leading-relaxed">
                 {{ summary?.honors?.reason ?? 'Your honors eligibility updates automatically after the admin uploads your grades.' }}
               </div>
             </div>
 
             <div class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm">
-              <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4">Quick Stats</h3>
+              <h3 class="text-xs font-black text-slate-500 dark:text-slate-300 uppercase tracking-[0.16em] mb-4">Quick Stats</h3>
               <div class="grid grid-cols-2 gap-4">
                 <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
-                  <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Subjects</div>
+                  <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Subjects</div>
                   <div class="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{{ summary?.grade_count ?? 0 }}</div>
                 </div>
                 <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
-                  <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">My Posts</div>
+                  <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">My Posts</div>
                   <div class="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{{ summary?.post_count ?? 0 }}</div>
                 </div>
               </div>
             </div>
 
             <div class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
-              <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Honors Progress</h3>
+              <h3 class="text-xs font-black text-slate-500 dark:text-slate-300 uppercase tracking-[0.16em]">Honors Progress</h3>
               <div class="w-full h-3 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
                 <div
                   class="h-full bg-blue-600 rounded-full transition-all"
                   :style="{ width: `${Math.round(honorsProgress * 100)}%` }"
                 ></div>
               </div>
-              <div class="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+              <div class="flex items-center justify-between text-sm font-semibold text-slate-600 dark:text-slate-300">
                 <span>Progress to {{ summary?.honors_progress?.next_target || 'Next Target' }}</span>
                 <span>{{ Math.round(honorsProgress * 100) }}%</span>
               </div>
-              <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              <div class="text-sm text-slate-600 dark:text-slate-300 font-medium">
                 Gap to target: {{ summary?.honors_progress?.gap_to_next_target ?? 0 }}
               </div>
               <div class="space-y-2">
-                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">What is blocking me</div>
+                <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">What is blocking me</div>
                 <ul class="space-y-2">
                   <li v-if="blockingItems.length === 0" class="text-sm text-emerald-600 font-semibold">
                     You are on track for honors.
@@ -278,8 +278,8 @@ const overallMotivationalMessage = computed(() => {
             </div>
 
             <div class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-3">
-              <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Achievements</h3>
-              <div v-if="achievements.length === 0" class="text-sm text-slate-500 dark:text-slate-400">Complete more actions to unlock badges.</div>
+              <h3 class="text-xs font-black text-slate-500 dark:text-slate-300 uppercase tracking-[0.16em]">Achievements</h3>
+              <div v-if="achievements.length === 0" class="text-sm text-slate-600 dark:text-slate-300">Complete more actions to unlock badges.</div>
               <div v-for="badge in achievements" :key="badge.title" class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
                 <div class="text-sm font-black text-slate-900 dark:text-white">{{ badge.title }}</div>
                 <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">{{ badge.description }}</div>

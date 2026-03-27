@@ -42,7 +42,7 @@ app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   
   // Simple mock authentication
-  if (username === "admin" && password === "adminpass") {
+  if (username === "admin" && password === "Strongadminpass123!") {
     return res.json({ access_token: "mock_admin_token", token_type: "bearer", user: MOCK_USERS[0] });
   } else if (username.startsWith("2024") && password === "password123") {
     return res.json({ access_token: "mock_student_token", token_type: "bearer", user: MOCK_USERS[1] });
