@@ -14,6 +14,16 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
+      - key: PGUSER
+        sync: false
+      - key: PGPASSWORD
+        sync: false
+      - key: PGHOST
+        sync: false
+      - key: PGPORT
+        value: "6543"
+      - key: PGDATABASE
+        value: postgres
       - key: SUPABASE_SSL_NO_VERIFY
         sync: false
       - key: CORS_ALLOWED_ORIGINS
