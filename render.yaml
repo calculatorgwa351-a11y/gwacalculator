@@ -24,6 +24,8 @@ services:
         value: "1"
       - key: COOKIE_SAMESITE
         value: lax
+      - key: ALLOW_SQLITE_IN_PRODUCTION
+        value: "0"
       - key: INIT_DB_ON_STARTUP
         value: "1"
       - key: SEED_DEMO_DATA
@@ -37,4 +39,6 @@ services:
       - key: DEMO_RESET_PASSWORDS
         value: "0"
       - key: WEB_CONCURRENCY
-        value: "1"
+        value: "2"
+      - key: GUNICORN_TIMEOUT
+        value: "120"

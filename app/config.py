@@ -83,6 +83,7 @@ class Settings:
     db_pool_size: int
     db_max_overflow: int
     web_concurrency: int
+    allow_sqlite_in_production: bool
 
     @property
     def is_production(self) -> bool:
@@ -111,6 +112,12 @@ class Settings:
 
         if self.cookie_samesite not in {"lax", "strict", "none"}:
             raise RuntimeError("COOKIE_SAMESITE must be one of: lax, strict, none.")
+
+        if self.is_production and self.database_backend == "sqlite" and not self.allow_sqlite_in_production:
+            raise RuntimeError(
+                "Production must use Postgres/Supabase. Set DATABASE_URL or PG* env vars, "
+                "or explicitly set ALLOW_SQLITE_IN_PRODUCTION=1 to bypass."
+            )
 
 
 @lru_cache(maxsize=1)
@@ -149,6 +156,7 @@ def get_settings() -> Settings:
         db_pool_size=_as_int(os.getenv("DB_POOL_SIZE"), 10),
         db_max_overflow=_as_int(os.getenv("DB_MAX_OVERFLOW"), 20),
         web_concurrency=max(1, _as_int(os.getenv("WEB_CONCURRENCY"), 2)),
+        allow_sqlite_in_production=_as_bool(os.getenv("ALLOW_SQLITE_IN_PRODUCTION"), False),
     )
     settings.validate()
     return settings

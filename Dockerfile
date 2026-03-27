@@ -26,13 +26,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+RUN adduser --disabled-password --gecos "" appuser
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --default-timeout=180 --retries 8 -r requirements.txt
 
 COPY app ./app
 COPY init.py ./init.py
+COPY gunicorn.conf.py ./gunicorn.conf.py
 COPY --from=frontend-builder /app/frontend/dist ./dist
+
+RUN chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-5000} --workers ${WEB_CONCURRENCY:-2} --proxy-headers --forwarded-allow-ips=*"]
+CMD ["sh", "-c", "gunicorn app.main:app -c gunicorn.conf.py"]

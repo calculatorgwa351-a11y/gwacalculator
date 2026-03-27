@@ -9,6 +9,7 @@ from typing import Iterable
 import certifi
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.inspection import inspect as sa_inspect
@@ -37,14 +38,18 @@ TABLE_MODELS = [
 ]
 
 
+class MigrationError(RuntimeError):
+    pass
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="One-time migration from local SQLite to Supabase/Postgres."
     )
     parser.add_argument(
         "--source",
-        default=str(Path.cwd() / "gwa_calculator.db"),
-        help="Path to the local SQLite database file. Defaults to ./gwa_calculator.db",
+        default=str(REPO_ROOT / "gwa_calculator.db"),
+        help="Path to the local SQLite database file. Defaults to <repo>/gwa_calculator.db",
     )
     parser.add_argument(
         "--target-url",
@@ -90,21 +95,45 @@ def reset_postgres_sequence(engine, model, inserted_count: int) -> None:
         )
 
 
+def normalize_error(exc: Exception) -> MigrationError:
+    message = str(exc)
+    lowered = message.lower()
+
+    if "password authentication failed" in lowered:
+        return MigrationError(
+            "Supabase rejected the database password. Update PGPASSWORD or DATABASE_URL in .env "
+            "with the current Supabase Postgres credentials, then rerun the migration."
+        )
+
+    if "target database is not empty" in lowered:
+        return MigrationError(message)
+
+    if "could not translate host name" in lowered or "name or service not known" in lowered:
+        return MigrationError(
+            "The Postgres host could not be resolved. Check PGHOST or DATABASE_URL in .env."
+        )
+
+    if isinstance(exc, SQLAlchemyError):
+        return MigrationError(f"Database migration failed: {message}")
+
+    return MigrationError(message)
+
+
 def main() -> int:
     args = parse_args()
     settings = get_settings()
 
     source_path = Path(args.source).expanduser().resolve()
     if not source_path.exists():
-        raise SystemExit(f"Source SQLite database not found: {source_path}")
+        raise MigrationError(f"Source SQLite database not found: {source_path}")
 
     source_url = f"sqlite:///{source_path.as_posix()}"
     target_url = (args.target_url or settings.database_url).strip()
 
     if not target_url:
-        raise SystemExit("Target DATABASE_URL is empty. Set Supabase credentials first.")
+        raise MigrationError("Target DATABASE_URL is empty. Set Supabase credentials first.")
     if target_url.startswith("sqlite"):
-        raise SystemExit("Target database must be Supabase/Postgres, not SQLite.")
+        raise MigrationError("Target database must be Supabase/Postgres, not SQLite.")
 
     source_engine = create_engine(source_url, connect_args={"check_same_thread": False})
     target_engine_kwargs = {}
@@ -138,7 +167,7 @@ def main() -> int:
 
         if nonempty_tables:
             joined = ", ".join(f"{table}={count}" for table, count in nonempty_tables.items())
-            raise SystemExit(
+            raise MigrationError(
                 "Target database is not empty. Use a fresh Supabase database before rerunning. "
                 f"Non-empty tables: {joined}"
             )
@@ -211,7 +240,7 @@ def main() -> int:
             print("Skipped missing source tables: " + ", ".join(skipped_tables))
 
         if mismatches:
-            raise SystemExit("Verification failed: " + "; ".join(mismatches))
+            raise MigrationError("Verification failed: " + "; ".join(mismatches))
 
         print("Verification passed.")
         return 0
@@ -221,4 +250,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except MigrationError as exc:
+        raise SystemExit(f"Migration failed: {exc}") from None
+    except Exception as exc:
+        raise SystemExit(f"Migration failed: {normalize_error(exc)}") from None

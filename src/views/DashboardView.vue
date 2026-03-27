@@ -145,6 +145,26 @@ const achievements = computed(() => {
   }
   return list
 })
+
+const overallMotivationalMessage = computed(() => {
+  const gwa = summary.value?.gwa
+  if (gwa === null || gwa === undefined) {
+    return 'Your overall GWA message will appear automatically after the admin uploads your grades.'
+  }
+  if (gwa >= 1.0 && gwa <= 1.5) {
+    return 'Outstanding performance! You are truly excelling in your academic journey!'
+  }
+  if (gwa <= 2.0) {
+    return 'Very strong performance! Keep pushing towards excellence!'
+  }
+  if (gwa <= 2.75) {
+    return "You're doing well overall. Stay consistent and aim higher!"
+  }
+  if (gwa <= 3.0) {
+    return "You made it through, but there's room for improvement. Keep going!"
+  }
+  return 'This is not the end. Use this as motivation to bounce back stronger!'
+})
 </script>
 
 <template>
@@ -207,7 +227,10 @@ const achievements = computed(() => {
                 <span class="w-2 h-2 bg-emerald-400 rounded-full"></span>
                 {{ honorsBadge }}
               </div>
-              <div v-else class="text-xs font-bold opacity-80 leading-relaxed">
+              <div class="mt-3 text-xs font-bold opacity-90 leading-relaxed">
+                {{ overallMotivationalMessage }}
+              </div>
+              <div v-if="!honorsBadge" class="mt-3 text-xs font-bold opacity-80 leading-relaxed">
                 {{ summary?.honors?.reason ?? 'Your honors eligibility updates automatically after the admin uploads your grades.' }}
               </div>
             </div>
@@ -267,7 +290,7 @@ const achievements = computed(() => {
       </div>
 
       <div v-show="activeView === 'grades'">
-        <GradeList />
+        <GradeList :summary="summary" />
       </div>
 
       <div v-show="activeView === 'social'">
