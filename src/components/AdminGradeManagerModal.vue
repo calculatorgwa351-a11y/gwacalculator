@@ -220,9 +220,9 @@ watch(
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-    <div class="w-full max-w-6xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[2.5rem] shadow-xl overflow-hidden">
-      <div class="px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+  <div v-if="isOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
+    <div class="my-4 w-full max-w-6xl overflow-hidden rounded-[2rem] border border-slate-100 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800 sm:rounded-[2.5rem]">
+      <div class="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 dark:border-slate-700 sm:px-8 sm:py-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Admin Grade Management</div>
           <div class="text-xl font-black text-slate-900 dark:text-white">
@@ -233,33 +233,33 @@ watch(
             Grades are centrally managed here. Students can only view the results after login.
           </div>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end">
           <button
             @click="openCreateModal"
-            class="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all"
+            class="w-full rounded-xl bg-blue-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-blue-700 xl:w-auto"
           >
             Add Grade
           </button>
-          <label class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">
+          <label class="w-full cursor-pointer rounded-xl bg-slate-100 px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 xl:w-auto">
             Import CSV
             <input type="file" accept=".csv" class="hidden" @change="onImportFileChange">
           </label>
           <button
             @click="downloadTemplate"
-            class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+            class="w-full rounded-xl bg-slate-100 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 xl:w-auto"
           >
             CSV Template
           </button>
           <button
             @click="emit('close')"
-            class="px-4 py-2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-xl hover:opacity-90 transition-all"
+            class="w-full rounded-xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:opacity-90 dark:bg-white dark:text-slate-900 sm:col-span-2 xl:w-auto"
           >
             Close
           </button>
         </div>
       </div>
 
-      <div class="p-8 space-y-6 max-h-[80vh] overflow-y-auto">
+      <div class="max-h-[calc(100vh-10rem)] space-y-6 overflow-y-auto p-4 sm:max-h-[80vh] sm:p-8">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="p-6 rounded-[2rem] bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
             <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Current GWA</div>
@@ -346,79 +346,137 @@ watch(
               </div>
             </button>
 
-            <div v-if="isYearOpen(yearGroup.year)" class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
-                <thead class="bg-white/80 dark:bg-slate-900/80">
-                  <tr>
-                    <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Semester</th>
-                    <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Subject</th>
-                    <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Units</th>
-                    <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Grade</th>
-                    <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Status</th>
-                    <th class="px-6 py-4 text-right text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Actions</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                  <tr
-                    v-for="grade in yearGroup.items"
-                    :key="grade.id"
-                    class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
-                  >
-                    <td class="px-6 py-4 text-sm font-bold text-slate-600 dark:text-slate-300">
-                      Semester {{ grade.semester }}
-                    </td>
-                    <td class="px-6 py-4">
-                      <div class="font-black text-slate-900 dark:text-white">{{ grade.subject }}</div>
-                      <div class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        Recorded for {{ yearGroup.year }} Year
-                      </div>
-                    </td>
-                    <td class="px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200">
-                      {{ grade.units }}
-                    </td>
-                    <td class="px-6 py-4">
-                      <span
-                        :class="[
-                          'inline-flex min-w-16 justify-center rounded-xl px-3 py-2 text-sm font-black',
-                          grade.failed
-                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                        ]"
-                      >
-                        {{ grade.grade.toFixed(2) }}
-                      </span>
-                    </td>
-                    <td class="px-6 py-4">
-                      <span
-                        :class="[
-                          'inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]',
-                          grade.failed
-                            ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-300'
-                            : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300'
-                        ]"
-                      >
-                        {{ grade.failed ? 'Needs Attention' : 'Passing' }}
-                      </span>
-                    </td>
-                    <td class="px-6 py-4">
-                      <div class="flex justify-end gap-2">
-                        <button
-                          @click="openEditModal(grade)"
-                          class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+            <div v-if="isYearOpen(yearGroup.year)">
+              <div class="hidden overflow-x-auto md:block">
+                <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
+                  <thead class="bg-white/80 dark:bg-slate-900/80">
+                    <tr>
+                      <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Semester</th>
+                      <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Subject</th>
+                      <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Units</th>
+                      <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Grade</th>
+                      <th class="px-6 py-4 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Status</th>
+                      <th class="px-6 py-4 text-right text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                    <tr
+                      v-for="grade in yearGroup.items"
+                      :key="grade.id"
+                      class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <td class="px-6 py-4 text-sm font-bold text-slate-600 dark:text-slate-300">
+                        Semester {{ grade.semester }}
+                      </td>
+                      <td class="px-6 py-4">
+                        <div class="font-black text-slate-900 dark:text-white">{{ grade.subject }}</div>
+                        <div class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          Recorded for {{ yearGroup.year }} Year
+                        </div>
+                      </td>
+                      <td class="px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200">
+                        {{ grade.units }}
+                      </td>
+                      <td class="px-6 py-4">
+                        <span
+                          :class="[
+                            'inline-flex min-w-16 justify-center rounded-xl px-3 py-2 text-sm font-black',
+                            grade.failed
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                              : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                          ]"
                         >
-                          Edit
-                        </button>
-                        <button
-                          @click="deleteGrade(grade)"
-                          class="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-all"
+                          {{ grade.grade.toFixed(2) }}
+                        </span>
+                      </td>
+                      <td class="px-6 py-4">
+                        <span
+                          :class="[
+                            'inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]',
+                            grade.failed
+                              ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-300'
+                              : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300'
+                          ]"
                         >
-                          Delete
-                        </button>
+                          {{ grade.failed ? 'Needs Attention' : 'Passing' }}
+                        </span>
+                      </td>
+                      <td class="px-6 py-4">
+                        <div class="flex justify-end gap-2">
+                          <button
+                            @click="openEditModal(grade)"
+                            class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            @click="deleteGrade(grade)"
+                            class="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-all"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="space-y-3 p-4 md:hidden">
+                <article
+                  v-for="grade in yearGroup.items"
+                  :key="grade.id"
+                  class="rounded-[1.5rem] border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="text-base font-black text-slate-900 dark:text-white">{{ grade.subject }}</div>
+                      <div class="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                        Year {{ yearGroup.year }} · Semester {{ grade.semester }}
                       </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </div>
+                    <span
+                      :class="[
+                        'inline-flex shrink-0 min-w-16 justify-center rounded-xl px-3 py-2 text-sm font-black',
+                        grade.failed
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      ]"
+                    >
+                      {{ grade.grade.toFixed(2) }}
+                    </span>
+                  </div>
+
+                  <div class="mt-4 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <span class="rounded-full bg-white px-3 py-1 dark:bg-slate-800">Units: {{ grade.units }}</span>
+                    <span
+                      :class="[
+                        'rounded-full px-3 py-1 font-black uppercase tracking-[0.16em]',
+                        grade.failed
+                          ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-300'
+                          : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300'
+                      ]"
+                    >
+                      {{ grade.failed ? 'Needs Attention' : 'Passing' }}
+                    </span>
+                  </div>
+
+                  <div class="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      @click="openEditModal(grade)"
+                      class="rounded-xl bg-slate-200 px-3 py-3 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all active:scale-[0.98] dark:bg-slate-700 dark:text-slate-200"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      @click="deleteGrade(grade)"
+                      class="rounded-xl bg-red-50 px-3 py-3 text-[10px] font-black uppercase tracking-widest text-red-600 transition-all active:scale-[0.98] dark:bg-red-900/20 dark:text-red-300"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              </div>
             </div>
           </section>
         </div>

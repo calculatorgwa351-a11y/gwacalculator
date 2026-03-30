@@ -8,23 +8,30 @@ const themeStore = useThemeStore()
 const authStore = useAuthStore()
 const router = useRouter()
 
+const emit = defineEmits(['view-change', 'close'])
+const props = defineProps<{
+  activeView: string
+  isOpen?: boolean
+}>()
+
 const logout = async () => {
   await authStore.logout()
+  emit('close')
   router.push('/')
 }
 
-const emit = defineEmits(['view-change'])
-const props = defineProps<{
-  activeView: string
-}>()
-
 const setView = (view: string) => {
   emit('view-change', view)
+  emit('close')
 }
 </script>
 
 <template>
-  <aside id="sidebar" class="w-64 glass dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col sticky top-0 h-screen z-50 transition-transform duration-300">
+  <aside
+    id="sidebar"
+    class="fixed inset-y-0 left-0 w-72 max-w-[85vw] glass dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen z-50 transition-transform duration-300 lg:sticky lg:top-0 lg:w-64 lg:max-w-none"
+    :class="props.isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+  >
     <div class="p-6">
       <div class="flex items-center justify-between mb-8">
         <div class="flex items-center gap-3">
@@ -33,38 +40,47 @@ const setView = (view: string) => {
           </div>
           <span class="font-black text-xl tracking-tight text-slate-800 dark:text-white">GWA<span class="text-blue-600 dark:text-blue-400">calculator</span></span>
         </div>
+        <button
+          type="button"
+          class="lg:hidden w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center"
+          @click="emit('close')"
+          aria-label="Close menu"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
       </div>
 
       <nav class="space-y-1" aria-label="Sidebar Navigation">
         <router-link
           to="/profile"
+          @click="emit('close')"
           class="sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A9 9 0 1118.364 4.561 9 9 0 015.12 17.804z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
           Profile
         </router-link>
-        <button 
+        <button
           @click="setView('overview')"
           :class="['sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all', activeView === 'overview' ? 'active bg-blue-600 text-white' : 'text-slate-700 dark:text-slate-200']"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
           Dashboard
         </button>
-        <button 
+        <button
           @click="setView('grades')"
           :class="['sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all', activeView === 'grades' ? 'active bg-blue-600 text-white' : 'text-slate-700 dark:text-slate-200']"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
           My Evaluation
         </button>
-        <button 
+        <button
           @click="setView('social')"
           :class="['sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all', activeView === 'social' ? 'active bg-blue-600 text-white' : 'text-slate-700 dark:text-slate-200']"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"/></svg>
           Student Feed
         </button>
-        <button 
+        <button
           @click="setView('handbook')"
           :class="['sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all', activeView === 'handbook' ? 'active bg-blue-600 text-white' : 'text-slate-700 dark:text-slate-200']"
         >
@@ -75,6 +91,7 @@ const setView = (view: string) => {
         <router-link
           v-if="authStore.isAdmin"
           to="/admin"
+          @click="emit('close')"
           class="sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h4m-6 6v2a2 2 0 002 2h6a2 2 0 002-2v-6a2 2 0 00-2-2h-1M9 17H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v2"/></svg>
@@ -115,7 +132,7 @@ const setView = (view: string) => {
     </div>
 
     <div class="mt-auto p-6 border-t border-slate-100 dark:border-slate-800">
-      <button 
+      <button
         @click="themeStore.toggleTheme"
         class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 transition-all"
       >
@@ -123,11 +140,11 @@ const setView = (view: string) => {
         <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
         Theme
       </button>
-      <button 
+      <button
         @click="logout"
         class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all mt-1"
       >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a2 2 0 013-3h4a3 3 0 013 3v1"/></svg>
         Sign Out
       </button>
     </div>

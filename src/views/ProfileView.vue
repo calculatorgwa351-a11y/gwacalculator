@@ -16,6 +16,7 @@ const password = ref('')
 const isLoading = ref(false)
 const success = ref('')
 const error = ref('')
+const isSidebarOpen = ref(false)
 
 const user = computed(() => authStore.user)
 
@@ -66,18 +67,41 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex min-h-screen">
-    <Sidebar :active-view="'profile'" @view-change="() => router.push('/dashboard')" />
+  <div class="min-h-screen bg-slate-50 dark:bg-slate-950 lg:flex">
+    <div
+      v-if="isSidebarOpen"
+      class="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden"
+      @click="isSidebarOpen = false"
+    ></div>
+    <Sidebar
+      :active-view="'profile'"
+      :is-open="isSidebarOpen"
+      @view-change="() => router.push('/dashboard')"
+      @close="isSidebarOpen = false"
+    />
 
-    <main class="flex-1 p-8 overflow-y-auto">
-      <header class="flex items-center justify-between mb-8">
+    <main class="w-full flex-1 p-4 pt-20 sm:p-6 sm:pt-24 md:p-8 md:pt-24 lg:pt-8 overflow-y-auto">
+      <div class="fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:hidden">
+        <button
+          type="button"
+          class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          @click="isSidebarOpen = true"
+          aria-label="Open menu"
+        >
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <div class="text-sm font-black tracking-tight text-slate-900 dark:text-white">Profile</div>
+        <div class="w-11"></div>
+      </div>
+
+      <header class="mb-8 flex items-center justify-between">
         <div>
-          <h1 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Profile</h1>
+          <h1 class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Profile</h1>
           <p class="text-slate-500 dark:text-slate-400 font-medium">Manage your academic identity</p>
         </div>
       </header>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         <div class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm">
           <div class="flex items-center gap-4">
             <div
@@ -101,7 +125,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 sm:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm">
           <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-6">Edit Profile</h3>
 
           <form @submit.prevent="saveProfile" class="space-y-6">
@@ -134,11 +158,11 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="flex justify-end">
+            <div class="flex justify-stretch sm:justify-end">
               <button
                 type="submit"
                 :disabled="isLoading"
-                class="px-6 py-3 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-blue-700 transition-all disabled:opacity-50"
+                class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-blue-700 transition-all disabled:opacity-50"
               >
                 <span v-if="isLoading">Saving...</span>
                 <span v-else>Save Changes</span>

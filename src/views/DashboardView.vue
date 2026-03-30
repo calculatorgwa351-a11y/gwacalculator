@@ -16,6 +16,7 @@ const user = computed(() => authStore.user)
 const activeView = ref('overview')
 const summary = ref<DashboardSummary | null>(null)
 const postsRefreshKey = ref(0)
+const isSidebarOpen = ref(false)
 
 const newPostContent = ref('')
 const isPosting = ref(false)
@@ -168,24 +169,42 @@ const overallMotivationalMessage = computed(() => {
 </script>
 
 <template>
-  <div class="flex min-h-screen">
-    <Sidebar :active-view="activeView" @view-change="setView" />
+  <div class="min-h-screen bg-slate-50 dark:bg-slate-950 lg:flex">
+    <div
+      v-if="isSidebarOpen"
+      class="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden"
+      @click="isSidebarOpen = false"
+    ></div>
+    <Sidebar :active-view="activeView" :is-open="isSidebarOpen" @view-change="setView" @close="isSidebarOpen = false" />
 
-    <main class="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950">
-      <header class="flex items-center justify-between mb-8">
+    <main class="w-full flex-1 p-4 pt-20 sm:p-6 sm:pt-24 md:p-8 md:pt-24 lg:pt-8 overflow-y-auto">
+      <div class="fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:hidden">
+        <button
+          type="button"
+          class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          @click="isSidebarOpen = true"
+          aria-label="Open menu"
+        >
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <div class="text-sm font-black tracking-tight text-slate-900 dark:text-white">{{ viewTitles[activeView] }}</div>
+        <div class="w-11"></div>
+      </div>
+
+      <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h1 class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
             {{ viewTitles[activeView] }}
           </h1>
           <p class="text-slate-500 dark:text-slate-400 font-medium">
             Welcome back, {{ user?.name || 'Student' }}
           </p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
           <router-link
             v-if="authStore.isAdmin"
             to="/admin"
-            class="px-4 py-2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-xl hover:opacity-90 transition-all"
+            class="w-full sm:w-auto px-4 py-2 bg-slate-900 text-center text-white dark:bg-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-xl hover:opacity-90 transition-all"
           >
             Admin Dashboard
           </router-link>
