@@ -77,6 +77,7 @@ class Settings:
     init_db_on_startup: bool
     seed_demo_data: bool
     reset_demo_passwords: bool
+    reset_admin_password_on_startup: bool
     default_admin_school_id: str
     default_admin_name: str
     default_admin_password: str
@@ -147,6 +148,7 @@ def get_settings() -> Settings:
         init_db_on_startup=_as_bool(os.getenv("INIT_DB_ON_STARTUP"), True),
         seed_demo_data=_as_bool(os.getenv("SEED_DEMO_DATA"), app_env != "production"),
         reset_demo_passwords=_as_bool(os.getenv("DEMO_RESET_PASSWORDS"), False),
+        reset_admin_password_on_startup=_as_bool(os.getenv("RESET_ADMIN_PASSWORD_ON_STARTUP"), False),
         default_admin_school_id=os.getenv("DEFAULT_ADMIN_SCHOOL_ID", "admin").strip() or "admin",
         default_admin_name=os.getenv("DEFAULT_ADMIN_NAME", "Administrator").strip() or "Administrator",
         default_admin_password=os.getenv(

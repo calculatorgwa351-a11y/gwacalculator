@@ -182,6 +182,15 @@ def init_database():
             admin_user.name = settings.default_admin_name
             db.commit()
 
+        if (
+            admin_user
+            and settings.reset_admin_password_on_startup
+            and settings.default_admin_password
+        ):
+            admin_user.set_password(settings.default_admin_password)
+            db.commit()
+            logger.info("Reset bootstrap admin password for %s on startup.", admin_school_id)
+
         if admin_user:
             admin_record = db.query(Admin).filter(Admin.user_id == admin_user.id).first()
             if not admin_record:
