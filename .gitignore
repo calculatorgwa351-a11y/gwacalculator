@@ -3,7 +3,6 @@ __pycache__/
 instance/
 *.pyc
 app.db
-.env
 .venv/
 node_modules/
 .DS_Store
