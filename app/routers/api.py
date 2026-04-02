@@ -144,11 +144,11 @@ def _require_admin_user(request: Request, db: Session) -> User:
 def _serialize_grade(grade: SubjectGrade, gwa: Optional[float] = None) -> dict:
     return {
         "id": grade.id,
-        "subject": grade.subject,
-        "units": grade.units,
-        "grade": grade.grade,
-        "year": grade.year,
-        "semester": grade.semester,
+        "subject": grade.subject or "Untitled Subject",
+        "units": float(grade.units) if grade.units is not None else 0.0,
+        "grade": float(grade.grade) if grade.grade is not None else 0.0,
+        "year": int(grade.year) if grade.year is not None else 1,
+        "semester": int(grade.semester) if grade.semester is not None else 1,
         "timestamp": grade.timestamp.isoformat() if grade.timestamp else None,
         "failed": grade.is_failed(),
         "gwa": gwa,
@@ -1214,11 +1214,11 @@ async def get_student_detail(student_id: int, request: Request, db: Session = De
         "posts": [{"id": p.id, "content": p.content} for p in student.posts],
         "grades": [{
             "id": g.id,
-            "subject": g.subject,
-            "units": g.units,
-            "grade": g.grade,
-            "year": g.year,
-            "semester": g.semester,
+            "subject": g.subject or "Untitled Subject",
+            "units": float(g.units) if g.units is not None else 0.0,
+            "grade": float(g.grade) if g.grade is not None else 0.0,
+            "year": int(g.year) if g.year is not None else 1,
+            "semester": int(g.semester) if g.semester is not None else 1,
             "timestamp": g.timestamp.isoformat() if g.timestamp else None,
             "failed": g.is_failed()
         } for g in student.grades]

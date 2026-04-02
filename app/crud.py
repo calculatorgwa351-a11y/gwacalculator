@@ -1,9 +1,7 @@
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from functools import lru_cache
 from app.models import SubjectGrade, User, Post, Department, Course, Admin
 
-@lru_cache(maxsize=128)
 def compute_gwa_for_user(user_id: int, db: Session) -> Optional[float]:
     grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user_id).all()
     total_units = sum(g.units for g in grades if g.units is not None and g.grade is not None)
@@ -12,7 +10,6 @@ def compute_gwa_for_user(user_id: int, db: Session) -> Optional[float]:
     total = sum(g.units * g.grade for g in grades if g.units is not None and g.grade is not None)
     return round(total / total_units, 3)
 
-@lru_cache(maxsize=128)
 def analyze_latin_honors(user_id: int, db: Session) -> dict:
     grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user_id).all()
     if not grades:
@@ -65,7 +62,6 @@ def analyze_latin_honors(user_id: int, db: Session) -> dict:
     else:
         return {"eligible": False, "reason": "GWA does not meet honors cutoff", "title": None, "gwa": gwa, "status": status}
 
-@lru_cache(maxsize=1)
 def get_global_analytics(db: Session) -> dict:
     from sqlalchemy import func, cast, Float
     
@@ -90,3 +86,12 @@ def get_global_analytics(db: Session) -> dict:
         "average_gwa": round(avg_gwa_result, 3) if avg_gwa_result else None,
         "failure_rate": round(fail_rate, 4) if fail_rate is not None else None
     }
+
+
+def _noop_cache_clear() -> None:
+    return None
+
+
+compute_gwa_for_user.cache_clear = _noop_cache_clear
+analyze_latin_honors.cache_clear = _noop_cache_clear
+get_global_analytics.cache_clear = _noop_cache_clear
