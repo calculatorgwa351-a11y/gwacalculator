@@ -18,6 +18,9 @@ type GwaSummaryCard = {
   message: string
   band: string
   count: number
+  deanListerLabel: string
+  deanListerMessage: string
+  deanListerTone: string
 }
 
 const yearLabels: Record<number, string> = {
@@ -111,6 +114,56 @@ const getOverallFeedback = (gwa: number | null) => {
   }
 }
 
+const getDeanListerFeedback = (gwa: number | null, subjectCount: number) => {
+  if (gwa === null || subjectCount === 0) {
+    return {
+      label: 'Dean’s List Pending',
+      message: 'Dean’s List standing will appear once your semester grades are complete.',
+      tone: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+    }
+  }
+
+  if (gwa <= 1.75) {
+    return {
+      label: 'Dean’s Lister',
+      message: `You are qualified for Dean’s List recognition this semester with a GWA of ${gwa.toFixed(3)}.`,
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+    }
+  }
+
+  const gap = Math.max(0, gwa - 1.75)
+  return {
+    label: 'Not Yet Qualified',
+    message: `You are not yet qualified for Dean’s List this semester. Improve by ${gap.toFixed(3)} to reach a 1.750 GWA.`,
+    tone: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
+  }
+}
+
+const getDeanListerStanding = (gwa: number | null, subjectCount: number) => {
+  if (gwa === null || subjectCount === 0) {
+    return {
+      label: "Dean's List Pending",
+      message: "Dean's List standing will appear once your semester grades are complete.",
+      tone: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+    }
+  }
+
+  if (gwa <= 1.75) {
+    return {
+      label: "Dean's Lister",
+      message: `You are qualified for Dean's List recognition this semester with a GWA of ${gwa.toFixed(3)}.`,
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+    }
+  }
+
+  const gap = Math.max(0, gwa - 1.75)
+  return {
+    label: 'Not Yet Qualified',
+    message: `You are not yet qualified for Dean's List this semester. Improve by ${gap.toFixed(3)} to reach a 1.750 GWA.`,
+    tone: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
+  }
+}
+
 const toneClass = (band: string) => {
   switch (band) {
     case 'Excellent':
@@ -152,13 +205,17 @@ const semesterSummaries = computed<GwaSummaryCard[]>(() => {
       const [year, semester] = key.split('-').map(Number)
       const gwa = calculateWeightedGwa(items)
       const feedback = getSemesterFeedback(gwa)
+      const deanLister = getDeanListerStanding(gwa, items.length)
       return {
         key,
         label: `${yearLabels[year] || `Year ${year}`} - ${semester}${semester === 1 ? 'st' : semester === 2 ? 'nd' : semester === 3 ? 'rd' : 'th'} Semester`,
         gwa,
         count: items.length,
         band: feedback.band,
-        message: feedback.message
+        message: feedback.message,
+        deanListerLabel: deanLister.label,
+        deanListerMessage: deanLister.message,
+        deanListerTone: deanLister.tone
       }
     })
 })
@@ -168,13 +225,17 @@ const yearlySummaries = computed<GwaSummaryCard[]>(() =>
     const items = grades.value.filter((grade) => grade.year === year)
     const gwa = calculateWeightedGwa(items)
     const feedback = getSemesterFeedback(gwa)
+    const deanLister = getDeanListerStanding(gwa, items.length)
     return {
       key: `year-${year}`,
       label: yearLabels[year],
       gwa,
       count: items.length,
       band: feedback.band,
-      message: feedback.message
+      message: feedback.message,
+      deanListerLabel: deanLister.label,
+      deanListerMessage: deanLister.message,
+      deanListerTone: deanLister.tone
     }
   })
 )
@@ -318,8 +379,12 @@ onMounted(() => {
               </div>
             </div>
             <div :class="['rounded-2xl border px-4 py-3 text-sm font-semibold leading-relaxed', toneClass(semester.band)]">
-                  <div class="text-xs font-black uppercase tracking-[0.16em] mb-1">{{ semester.band }}</div>
+              <div class="text-xs font-black uppercase tracking-[0.16em] mb-1">{{ semester.band }}</div>
               <div>{{ semester.message }}</div>
+            </div>
+            <div :class="['rounded-2xl border px-4 py-3 text-sm font-semibold leading-relaxed', semester.deanListerTone]">
+              <div class="text-xs font-black uppercase tracking-[0.16em] mb-1">{{ semester.deanListerLabel }}</div>
+              <div>{{ semester.deanListerMessage }}</div>
             </div>
           </div>
         </div>
