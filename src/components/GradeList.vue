@@ -196,6 +196,39 @@ const honorsReason = computed(() => {
   return props.summary?.honors?.reason || 'Your Latin honors standing is computed automatically from your uploaded grades.'
 })
 const nextHonorsTarget = computed(() => props.summary?.honors_progress?.next_target || 'Cum Laude')
+const honorsEligibility = computed(() => {
+  if (!grades.value.length) {
+    return {
+      label: 'Eligibility Pending',
+      message: 'Eligibility will appear once your grades are complete.',
+      detail: 'Current standing will appear after the admin uploads your full academic record.',
+      tone: 'border-slate-200 bg-white/10 text-blue-50/90'
+    }
+  }
+
+  const gwa = overallSummary.value.gwa
+  const honors = props.summary?.honors
+  if (honors?.eligible && honors.title) {
+    return {
+      label: 'Eligible',
+      message: `Eligible for ${honors.title}`,
+      detail: `Current standing: ${formatGwa(gwa)} qualifies for ${honors.title}.`,
+      tone: 'border-emerald-300/40 bg-emerald-400/10 text-emerald-100'
+    }
+  }
+
+  const nextTarget = props.summary?.honors_progress?.next_target
+  const gap = props.summary?.honors_progress?.gap_to_next_target
+  return {
+    label: 'Not Yet Eligible',
+    message: 'Not eligible for Latin honors yet.',
+    detail:
+      nextTarget && typeof gap === 'number'
+        ? `Current standing: ${formatGwa(gwa)}. You need to improve by ${gap.toFixed(3)} to reach ${nextTarget}.`
+        : `Current standing: ${formatGwa(gwa)}. Keep improving your GWA to qualify for Latin honors.`,
+    tone: 'border-amber-300/40 bg-amber-400/10 text-amber-100'
+  }
+})
 
 const fetchGrades = async () => {
   isLoading.value = true
@@ -311,6 +344,16 @@ onMounted(() => {
           <div class="lg:max-w-sm w-full rounded-[1.5rem] bg-white/10 border border-white/10 p-4">
             <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">Latin Honors Standing</div>
             <div class="mt-2 text-2xl font-black">{{ honorsTitle }}</div>
+            <div
+              :class="[
+                'mt-4 rounded-2xl border px-4 py-3',
+                honorsEligibility.tone
+              ]"
+            >
+              <div class="text-[10px] font-black uppercase tracking-[0.16em] opacity-80">{{ honorsEligibility.label }}</div>
+              <div class="mt-1 text-base font-black leading-snug">{{ honorsEligibility.message }}</div>
+              <div class="mt-2 text-sm font-medium leading-relaxed opacity-90">{{ honorsEligibility.detail }}</div>
+            </div>
             <div class="mt-3 text-base leading-relaxed text-blue-50/90">{{ honorsReason }}</div>
             <div class="mt-3 text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">
               Next target: {{ nextHonorsTarget }}
