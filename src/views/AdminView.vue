@@ -35,6 +35,7 @@ const isRenamingStudents = ref(false)
 const isResettingDemoPasswords = ref(false)
 const activePasswordResetStudentId = ref<number | null>(null)
 const toasts = ref<{ id: number; tone: 'success' | 'error' | 'info'; message: string }[]>([])
+const isUtilitiesOpen = ref(false)
 const authStore = useAuthStore()
 const router = useRouter()
 let toastId = 0
@@ -64,8 +65,10 @@ const fetchAdminData = async () => {
       return
     }
 
-    const studentsRes = await apiFetch('/api/admin/students')
-    const analyticsRes = await apiFetch('/api/analytics')
+    const [studentsRes, analyticsRes] = await Promise.all([
+      apiFetch('/api/admin/students'),
+      apiFetch('/api/analytics')
+    ])
 
     if (studentsRes.ok) students.value = await studentsRes.json()
     if (analyticsRes.ok) analytics.value = await analyticsRes.json()
@@ -90,6 +93,32 @@ const filteredStudents = computed(() => {
 const clearSearch = () => {
   searchTerm.value = ''
 }
+
+const averageGwaValue = computed(() => analytics.value?.average_gwa ?? null)
+const failureRateValue = computed(() => analytics.value?.failure_rate ?? null)
+const failureRatePercent = computed(() => {
+  if (failureRateValue.value == null) return null
+  return Math.max(0, Math.min(100, failureRateValue.value * 100))
+})
+const averageGwaProgress = computed(() => {
+  if (averageGwaValue.value == null) return null
+  const normalized = ((5 - averageGwaValue.value) / 4) * 100
+  return Math.max(0, Math.min(100, normalized))
+})
+const averageGwaLabel = computed(() => {
+  if (averageGwaValue.value == null) return 'Waiting for student grades'
+  if (averageGwaValue.value <= 1.75) return 'Latin honors range'
+  if (averageGwaValue.value <= 2.5) return 'Good standing'
+  if (averageGwaValue.value <= 3.0) return 'Needs support'
+  return 'High academic risk'
+})
+const failureRateLabel = computed(() => {
+  if (failureRatePercent.value == null) return 'Waiting for grade data'
+  if (failureRatePercent.value <= 5) return 'Very low failure rate'
+  if (failureRatePercent.value <= 15) return 'Manageable failure rate'
+  if (failureRatePercent.value <= 30) return 'Needs attention'
+  return 'Intervention recommended'
+})
 
 const deleteStudent = async (id: number) => {
   if (!confirm('Are you sure you want to permanently delete this student?')) return
@@ -146,6 +175,7 @@ const handleManageGradesFromAnalytics = () => {
 
 const restoreDemoData = async () => {
   isRestoringDemoData.value = true
+  isUtilitiesOpen.value = false
   try {
     const res = await apiFetch('/api/admin/seed/demo_data?student_count=12', { method: 'POST' })
     const data = await res.json()
@@ -169,6 +199,7 @@ const restoreDemoData = async () => {
 
 const fixDummyNames = async () => {
   isRenamingStudents.value = true
+  isUtilitiesOpen.value = false
   try {
     const res = await apiFetch('/api/admin/seed/filipino_names', { method: 'POST' })
     if (res.ok) {
@@ -189,6 +220,7 @@ const fixDummyNames = async () => {
 
 const resetDemoPasswords = async () => {
   isResettingDemoPasswords.value = true
+  isUtilitiesOpen.value = false
   try {
     const res = await apiFetch('/api/admin/seed/demo_passwords', { method: 'POST' })
     const data = await res.json()
@@ -341,34 +373,69 @@ onMounted(() => {
           <h1 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white sm:text-3xl">Admin Console</h1>
           <p class="text-slate-500 dark:text-slate-400 font-medium">Academic oversight and student directory</p>
         </div>
-        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end">
-          <button
-            @click="restoreDemoData"
-            :disabled="isRestoringDemoData"
-            class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70 xl:w-auto"
-          >
-            {{ isRestoringDemoData ? 'Restoring...' : 'Restore Demo Data' }}
-          </button>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center xl:justify-end">
           <button
             @click="openCreateModal"
             class="w-full rounded-xl bg-blue-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-blue-700 xl:w-auto"
           >
             Create Student
           </button>
-          <button
-            @click="resetDemoPasswords"
-            :disabled="isResettingDemoPasswords"
-            class="w-full rounded-xl bg-amber-500 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-70 xl:w-auto"
-          >
-            {{ isResettingDemoPasswords ? 'Resetting...' : 'Reset Demo Passwords' }}
-          </button>
-          <button
-            @click="fixDummyNames"
-            :disabled="isRenamingStudents"
-            class="w-full rounded-xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-slate-900 sm:col-span-2 xl:w-auto"
-          >
-            {{ isRenamingStudents ? 'Renaming...' : 'Filipino Names' }}
-          </button>
+          <div class="relative sm:col-span-2 xl:w-auto">
+            <button
+              @click="isUtilitiesOpen = !isUtilitiesOpen"
+              class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-700 shadow-sm transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800 xl:w-auto"
+            >
+              Demo Tools
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            <div
+              v-if="isUtilitiesOpen"
+              class="absolute right-0 z-20 mt-2 w-full min-w-[18rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl dark:border-slate-700 dark:bg-slate-900 xl:w-80"
+            >
+              <div class="mb-3 px-1">
+                <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Demo utilities</div>
+                <div class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">Use these only when you need to refresh sample student data.</div>
+              </div>
+              <div class="space-y-2">
+                <button
+                  @click="restoreDemoData"
+                  :disabled="isRestoringDemoData"
+                  class="flex w-full items-center justify-between rounded-xl bg-emerald-50 px-4 py-3 text-left text-emerald-700 transition-all hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-emerald-900/20 dark:text-emerald-300"
+                >
+                  <span>
+                    <span class="block text-[10px] font-black uppercase tracking-[0.18em]">Restore demo data</span>
+                    <span class="mt-1 block text-xs font-medium">Create missing demo students and refresh sample grades/posts.</span>
+                  </span>
+                  <span class="text-[10px] font-black uppercase tracking-[0.18em]">{{ isRestoringDemoData ? 'Running...' : 'Run' }}</span>
+                </button>
+                <button
+                  @click="resetDemoPasswords"
+                  :disabled="isResettingDemoPasswords"
+                  class="flex w-full items-center justify-between rounded-xl bg-amber-50 px-4 py-3 text-left text-amber-700 transition-all hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-amber-900/20 dark:text-amber-300"
+                >
+                  <span>
+                    <span class="block text-[10px] font-black uppercase tracking-[0.18em]">Reset demo passwords</span>
+                    <span class="mt-1 block text-xs font-medium">Set all `2024xxxx` students back to `password123`.</span>
+                  </span>
+                  <span class="text-[10px] font-black uppercase tracking-[0.18em]">{{ isResettingDemoPasswords ? 'Running...' : 'Run' }}</span>
+                </button>
+                <button
+                  @click="fixDummyNames"
+                  :disabled="isRenamingStudents"
+                  class="flex w-full items-center justify-between rounded-xl bg-slate-100 px-4 py-3 text-left text-slate-700 transition-all hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  <span>
+                    <span class="block text-[10px] font-black uppercase tracking-[0.18em]">Apply Filipino names</span>
+                    <span class="mt-1 block text-xs font-medium">Rename demo student records using the Filipino seed list.</span>
+                  </span>
+                  <span class="text-[10px] font-black uppercase tracking-[0.18em]">{{ isRenamingStudents ? 'Running...' : 'Run' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -418,11 +485,37 @@ onMounted(() => {
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 xl:gap-8">
           <div class="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none sm:p-8">
             <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-2">Average GWA</h3>
-            <div class="text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">{{ analytics?.average_gwa?.toFixed(3) ?? '-' }}</div>
+            <div class="text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
+              <span v-if="averageGwaValue !== null">{{ averageGwaValue.toFixed(3) }}</span>
+              <span v-else-if="isLoading">...</span>
+              <span v-else>—</span>
+            </div>
+            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+              <div
+                class="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 transition-all duration-500"
+                :style="{ width: `${averageGwaProgress ?? 0}%` }"
+              />
+            </div>
+            <div class="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">
+              {{ averageGwaLabel }}
+            </div>
           </div>
           <div class="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none sm:p-8">
             <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-2">Failure Rate</h3>
-            <div class="text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">{{ analytics?.failure_rate ? (analytics.failure_rate * 100).toFixed(1) + '%' : '-' }}</div>
+            <div class="text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
+              <span v-if="failureRatePercent !== null">{{ failureRatePercent.toFixed(1) }}%</span>
+              <span v-else-if="isLoading">...</span>
+              <span v-else>—</span>
+            </div>
+            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+              <div
+                class="h-full rounded-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 transition-all duration-500"
+                :style="{ width: `${failureRatePercent ?? 0}%` }"
+              />
+            </div>
+            <div class="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">
+              {{ failureRateLabel }}
+            </div>
           </div>
           <div class="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none sm:p-8 sm:col-span-2 xl:col-span-1">
             <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-2">Total Students</h3>
