@@ -56,7 +56,7 @@ class GradeResponse(BaseModel):
     grade: float
     year: int
     semester: int
-    timestamp: datetime
+    timestamp: Optional[datetime] = None
     failed: bool
     gwa: Optional[float] = None
     

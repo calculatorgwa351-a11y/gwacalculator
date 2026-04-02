@@ -13,6 +13,7 @@ const emit = defineEmits(['close', 'manage-grades'])
 
 const isLoading = ref(false)
 const detail = ref<AdminStudentDetail | null>(null)
+const loadError = ref('')
 
 const timelineRef = ref<HTMLCanvasElement | null>(null)
 const gradesRef = ref<HTMLCanvasElement | null>(null)
@@ -124,15 +125,20 @@ const renderCharts = async () => {
 const fetchDetail = async () => {
   if (!props.studentId) return
   isLoading.value = true
+  loadError.value = ''
   try {
     const res = await apiFetch(`/api/admin/student/${props.studentId}`)
     if (res.ok) {
       detail.value = (await res.json()) as AdminStudentDetail
       await nextTick()
       await renderCharts()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      loadError.value = data?.detail || data?.error || 'Failed to load student details.'
     }
   } catch (err) {
     console.error('Failed to fetch student detail:', err)
+    loadError.value = 'Failed to load student details.'
   } finally {
     isLoading.value = false
   }
@@ -142,11 +148,16 @@ watch(
   () => [props.isOpen, props.studentId] as const,
   async ([open]) => {
     if (open) {
+      detail.value = null
       await fetchDetail()
       await nextTick()
       await renderCharts()
     }
-    else destroyCharts()
+    else {
+      detail.value = null
+      loadError.value = ''
+      destroyCharts()
+    }
   }
 )
 
@@ -188,6 +199,10 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="p-8 space-y-8">
+        <div v-if="loadError" class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {{ loadError }}
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div class="p-6 rounded-[2rem] bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
             <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Current GWA</div>

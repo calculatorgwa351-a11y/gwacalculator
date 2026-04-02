@@ -149,7 +149,7 @@ def _serialize_grade(grade: SubjectGrade, gwa: Optional[float] = None) -> dict:
         "grade": grade.grade,
         "year": grade.year,
         "semester": grade.semester,
-        "timestamp": grade.timestamp,
+        "timestamp": grade.timestamp.isoformat() if grade.timestamp else None,
         "failed": grade.is_failed(),
         "gwa": gwa,
     }

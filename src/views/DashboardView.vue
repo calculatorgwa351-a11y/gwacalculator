@@ -211,7 +211,7 @@ const overallMotivationalMessage = computed(() => {
         </div>
       </header>
 
-      <div v-show="activeView === 'overview'" class="space-y-8 animate-in">
+      <div v-if="activeView === 'overview'" class="space-y-8 animate-in">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none relative overflow-hidden">
             <h3 class="text-xs font-black text-slate-500 dark:text-slate-300 uppercase tracking-[0.16em] mb-6">Performance History</h3>
@@ -308,11 +308,11 @@ const overallMotivationalMessage = computed(() => {
         </div>
       </div>
 
-      <div v-show="activeView === 'grades'">
+      <div v-else-if="activeView === 'grades'">
         <GradeList :summary="summary" />
       </div>
 
-      <div v-show="activeView === 'social'">
+      <div v-else-if="activeView === 'social'">
         <div class="mb-8">
           <form @submit.prevent="handleCreatePost" class="bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm">
             <div v-if="postError" class="mb-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold">
@@ -329,7 +329,7 @@ const overallMotivationalMessage = computed(() => {
         <PostList :key="postsRefreshKey" />
       </div>
 
-      <div v-show="activeView === 'handbook'">
+      <div v-else-if="activeView === 'handbook'">
         <Handbook />
       </div>
     </main>
