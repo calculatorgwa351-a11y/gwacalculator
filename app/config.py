@@ -85,6 +85,7 @@ class Settings:
     db_max_overflow: int
     web_concurrency: int
     allow_sqlite_in_production: bool
+    temp_cache_ttl_seconds: int
 
     @property
     def is_production(self) -> bool:
@@ -159,6 +160,7 @@ def get_settings() -> Settings:
         db_max_overflow=_as_int(os.getenv("DB_MAX_OVERFLOW"), 20),
         web_concurrency=max(1, _as_int(os.getenv("WEB_CONCURRENCY"), 2)),
         allow_sqlite_in_production=_as_bool(os.getenv("ALLOW_SQLITE_IN_PRODUCTION"), False),
+        temp_cache_ttl_seconds=max(5, _as_int(os.getenv("TEMP_CACHE_TTL_SECONDS"), 20)),
     )
     settings.validate()
     return settings

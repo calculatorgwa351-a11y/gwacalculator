@@ -44,6 +44,8 @@ if database_url.startswith("sqlite"):
 else:
     engine_kwargs["pool_size"] = settings.db_pool_size
     engine_kwargs["max_overflow"] = settings.db_max_overflow
+    engine_kwargs["pool_timeout"] = 30
+    engine_kwargs["pool_use_lifo"] = True
 
     if database_url.startswith("postgresql"):
         if settings.supabase_ssl_no_verify:

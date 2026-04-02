@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Request, Depends, HTTPException, status, UploadFile, File, Query
 from fastapi.responses import JSONResponse, Response, HTMLResponse
 from fastapi.responses import RedirectResponse
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import csv
 import io
 import json
+from app.cache import api_cache
 from app.database import get_db
 from app.auth import (
     COOKIE_NAME,
@@ -97,6 +99,61 @@ def _invalidate_analytics_caches():
     compute_gwa_for_user.cache_clear()
     analyze_latin_honors.cache_clear()
     get_global_analytics.cache_clear()
+    for prefix in (
+        "dashboard-summary:",
+        "grades:",
+        "semester-gwa:",
+        "analytics:",
+        "admin-students:",
+        "student-detail:",
+        "posts:",
+        "posts-feed:",
+        "admin-audit:",
+    ):
+        api_cache.invalidate_prefix(prefix)
+
+
+def _cache_get_or_set(key: str, producer):
+    cached = api_cache.get(key)
+    if cached is not None:
+        return cached
+    value = producer()
+    return api_cache.set(key, value)
+
+
+def _invalidate_user_cache(user_id: int) -> None:
+    for prefix in (
+        f"dashboard-summary:{user_id}",
+        f"grades:{user_id}",
+        f"semester-gwa:{user_id}",
+        f"student-detail:{user_id}",
+        "analytics:",
+        "admin-students:",
+    ):
+        api_cache.invalidate_prefix(prefix)
+
+
+def _invalidate_post_cache(user_id: Optional[int] = None) -> None:
+    api_cache.invalidate_prefix("posts:")
+    api_cache.invalidate_prefix("posts-feed:")
+    if user_id is not None:
+        api_cache.invalidate_prefix(f"dashboard-summary:{user_id}")
+
+
+def _build_reaction_counts(db: Session, post_ids: list[int]) -> dict[int, dict[str, int]]:
+    if not post_ids:
+        return {}
+
+    counts = {post_id: {"like": 0, "love": 0, "wow": 0} for post_id in post_ids}
+    rows = (
+        db.query(Reaction.post_id, Reaction.type, func.count(Reaction.id))
+        .filter(Reaction.post_id.in_(post_ids))
+        .group_by(Reaction.post_id, Reaction.type)
+        .all()
+    )
+    for post_id, reaction_type, total in rows:
+        counts.setdefault(post_id, {"like": 0, "love": 0, "wow": 0})[reaction_type] = int(total)
+    return counts
 
 def _csv_response(filename: str, content: str) -> Response:
     return Response(
@@ -130,6 +187,7 @@ def _log_admin_action(
         )
         db.add(entry)
         db.commit()
+        api_cache.invalidate_prefix("admin-audit:")
     except Exception:
         db.rollback()
 
@@ -242,6 +300,7 @@ async def update_me(payload: ProfileUpdate, request: Request, db: Session = Depe
 
     db.commit()
     db.refresh(user)
+    _invalidate_user_cache(user.id)
 
     return {
         "id": user.id,
@@ -266,55 +325,52 @@ async def get_dashboard_summary(request: Request, db: Session = Depends(get_db))
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    cache_key = f"dashboard-summary:{user.id}"
 
-    gwa = compute_gwa_for_user(user.id, db)
-    honors = analyze_latin_honors(user.id, db)
+    def build_summary():
+        gwa = compute_gwa_for_user(user.id, db)
+        honors = analyze_latin_honors(user.id, db)
+        grade_stats = (
+            db.query(
+                func.count(SubjectGrade.id).label("grade_count"),
+                func.sum(case((SubjectGrade.grade > 3.0, 1), else_=0)).label("failed_count"),
+                func.sum(case((SubjectGrade.grade > 2.5, 1), else_=0)).label("above_2_5_count"),
+            )
+            .filter(SubjectGrade.user_id == user.id)
+            .first()
+        )
+        post_count = db.query(func.count(Post.id)).filter(Post.user_id == user.id).scalar() or 0
 
-    grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user.id).all()
-    failed_count = sum(1 for g in grades if g.grade is not None and g.grade > 3.0)
-    above_2_5_count = sum(1 for g in grades if g.grade is not None and g.grade > 2.5)
-
-    # Next target (lower GWA is better)
-    thresholds = [
-        ("Summa Cum Laude", 1.20),
-        ("Magna Cum Laude", 1.45),
-        ("Cum Laude", 1.75)
-    ]
-
-    next_target = None
-    gap_to_next = None
-    if gwa is not None:
-        # If already eligible for a title, the next target is the next stricter threshold.
-        if honors.get("eligible") and honors.get("title"):
-            if honors["title"] == "Cum Laude":
-                next_target = "Magna Cum Laude"
-                gap_to_next = round(max(0.0, gwa - 1.45), 3)
-            elif honors["title"] == "Magna Cum Laude":
-                next_target = "Summa Cum Laude"
-                gap_to_next = round(max(0.0, gwa - 1.20), 3)
+        next_target = None
+        gap_to_next = None
+        if gwa is not None:
+            if honors.get("eligible") and honors.get("title"):
+                if honors["title"] == "Cum Laude":
+                    next_target = "Magna Cum Laude"
+                    gap_to_next = round(max(0.0, gwa - 1.45), 3)
+                elif honors["title"] == "Magna Cum Laude":
+                    next_target = "Summa Cum Laude"
+                    gap_to_next = round(max(0.0, gwa - 1.20), 3)
+                else:
+                    gap_to_next = 0.0
             else:
-                next_target = None
-                gap_to_next = 0.0
-        else:
-            # Not eligible yet: aim for Cum Laude threshold by default.
-            next_target = "Cum Laude"
-            gap_to_next = round(max(0.0, gwa - 1.75), 3)
+                next_target = "Cum Laude"
+                gap_to_next = round(max(0.0, gwa - 1.75), 3)
 
-    grade_count = len(grades)
-    post_count = db.query(Post).filter(Post.user_id == user.id).count()
+        return {
+            "gwa": gwa,
+            "honors": honors,
+            "honors_progress": {
+                "next_target": next_target,
+                "gap_to_next_target": gap_to_next,
+                "failed_count": int(grade_stats.failed_count or 0),
+                "above_2_5_count": int(grade_stats.above_2_5_count or 0)
+            },
+            "grade_count": int(grade_stats.grade_count or 0),
+            "post_count": int(post_count)
+        }
 
-    return {
-        "gwa": gwa,
-        "honors": honors,
-        "honors_progress": {
-            "next_target": next_target,
-            "gap_to_next_target": gap_to_next,
-            "failed_count": failed_count,
-            "above_2_5_count": above_2_5_count
-        },
-        "grade_count": grade_count,
-        "post_count": post_count
-    }
+    return _cache_get_or_set(cache_key, build_summary)
 
 @router.post("/login")
 async def api_login(request: Request, db: Session = Depends(get_db)):
@@ -391,44 +447,50 @@ async def get_posts(request: Request, page: int = 1, limit: int = 10, db: Sessio
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Eagerly load comments and author to avoid N+1 queries
-    offset = (page - 1) * limit
-    posts = db.query(Post).options(
-        joinedload(Post.author),
-        joinedload(Post.comments).joinedload(Comment.author)
-    ).order_by(Post.timestamp.desc()).offset(offset).limit(limit).all()
-    
-    result = []
-    for p in posts:
-        # Use subqueries or optimized count for reactions
-        reactions = {
-            'like': db.query(Reaction).filter(Reaction.post_id == p.id, Reaction.type == 'like').count(),
-            'love': db.query(Reaction).filter(Reaction.post_id == p.id, Reaction.type == 'love').count(),
-            'wow': db.query(Reaction).filter(Reaction.post_id == p.id, Reaction.type == 'wow').count()
-        }
-        
-        comments = [{
-            "id": c.id,
-            "content": c.content,
-            "user": c.author.name,
-            "user_id": c.user_id,
-            "parent_comment_id": c.parent_comment_id,
-            "timestamp": c.timestamp.isoformat(),
-            "can_delete": (c.user_id == user.id) or is_admin(user, db)
-        } for c in sorted(p.comments, key=lambda x: x.timestamp)]
-            
-        result.append({
-            "id": p.id,
-            "content": p.content,
-            "author": p.author.name,
-            "author_id": p.user_id,
-            "timestamp": p.timestamp.isoformat(),
-            "reactions": reactions,
-            "comments": comments,
-            "can_edit": (p.user_id == user.id) or is_admin(user, db)
-        })
-    return result
+    user_is_admin = is_admin(user, db)
+
+    cache_key = f"posts:list:{user.id}:{page}:{limit}"
+
+    def build_posts():
+        offset = (page - 1) * limit
+        posts = (
+            db.query(Post)
+            .options(
+                joinedload(Post.author),
+                joinedload(Post.comments).joinedload(Comment.author)
+            )
+            .order_by(Post.timestamp.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        reaction_counts = _build_reaction_counts(db, [post.id for post in posts])
+
+        result = []
+        for p in posts:
+            comments = [{
+                "id": c.id,
+                "content": c.content,
+                "user": c.author.name,
+                "user_id": c.user_id,
+                "parent_comment_id": c.parent_comment_id,
+                "timestamp": c.timestamp.isoformat(),
+                "can_delete": (c.user_id == user.id) or user_is_admin
+            } for c in sorted(p.comments, key=lambda x: x.timestamp)]
+
+            result.append({
+                "id": p.id,
+                "content": p.content,
+                "author": p.author.name,
+                "author_id": p.user_id,
+                "timestamp": p.timestamp.isoformat(),
+                "reactions": reaction_counts.get(p.id, {"like": 0, "love": 0, "wow": 0}),
+                "comments": comments,
+                "can_edit": (p.user_id == user.id) or user_is_admin
+            })
+        return result
+
+    return _cache_get_or_set(cache_key, build_posts)
 
 @router.get("/posts/feed")
 async def get_posts_feed(
@@ -443,61 +505,61 @@ async def get_posts_feed(
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    user_is_admin = is_admin(user, db)
 
     limit = max(1, min(50, limit))
     page = max(1, page)
-    offset = (page - 1) * limit
+    cache_key = f"posts-feed:{user.id}:{page}:{limit}:{department or '*'}:{course or '*'}:{int(mine)}"
 
-    q = db.query(Post).options(
-        joinedload(Post.author),
-        joinedload(Post.comments).joinedload(Comment.author)
-    )
+    def build_feed():
+        offset = (page - 1) * limit
+        q = db.query(Post).options(
+            joinedload(Post.author),
+            joinedload(Post.comments).joinedload(Comment.author)
+        )
 
-    if mine:
-        q = q.filter(Post.user_id == user.id)
+        if mine:
+            q = q.filter(Post.user_id == user.id)
 
-    if department or course:
-        q = q.join(User, Post.user_id == User.id)
-        if department:
-            q = q.filter(User.department == department)
-        if course:
-            q = q.filter(User.course == course)
+        if department or course:
+            q = q.join(User, Post.user_id == User.id)
+            if department:
+                q = q.filter(User.department == department)
+            if course:
+                q = q.filter(User.course == course)
 
-    total = q.count()
-    posts = q.order_by(Post.timestamp.desc()).offset(offset).limit(limit).all()
+        total = q.count()
+        posts = q.order_by(Post.timestamp.desc()).offset(offset).limit(limit).all()
+        reaction_counts = _build_reaction_counts(db, [post.id for post in posts])
 
-    items = []
-    for p in posts:
-        reactions = {
-            'like': db.query(Reaction).filter(Reaction.post_id == p.id, Reaction.type == 'like').count(),
-            'love': db.query(Reaction).filter(Reaction.post_id == p.id, Reaction.type == 'love').count(),
-            'wow': db.query(Reaction).filter(Reaction.post_id == p.id, Reaction.type == 'wow').count()
-        }
+        items = []
+        for p in posts:
+            comments = [{
+                "id": c.id,
+                "content": c.content,
+                "user": c.author.name,
+                "user_id": c.user_id,
+                "parent_comment_id": c.parent_comment_id,
+                "timestamp": c.timestamp.isoformat(),
+                "can_delete": (c.user_id == user.id) or user_is_admin
+            } for c in sorted(p.comments, key=lambda x: x.timestamp)]
 
-        comments = [{
-            "id": c.id,
-            "content": c.content,
-            "user": c.author.name,
-            "user_id": c.user_id,
-            "parent_comment_id": c.parent_comment_id,
-            "timestamp": c.timestamp.isoformat(),
-            "can_delete": (c.user_id == user.id) or is_admin(user, db)
-        } for c in sorted(p.comments, key=lambda x: x.timestamp)]
+            items.append({
+                "id": p.id,
+                "content": p.content,
+                "author": p.author.name,
+                "author_id": p.user_id,
+                "department": p.author.department,
+                "course": p.author.course,
+                "timestamp": p.timestamp.isoformat(),
+                "reactions": reaction_counts.get(p.id, {"like": 0, "love": 0, "wow": 0}),
+                "comments": comments,
+                "can_edit": (p.user_id == user.id) or user_is_admin
+            })
 
-        items.append({
-            "id": p.id,
-            "content": p.content,
-            "author": p.author.name,
-            "author_id": p.user_id,
-            "department": p.author.department,
-            "course": p.author.course,
-            "timestamp": p.timestamp.isoformat(),
-            "reactions": reactions,
-            "comments": comments,
-            "can_edit": (p.user_id == user.id) or is_admin(user, db)
-        })
+        return {"items": items, "page": page, "limit": limit, "total": total}
 
-    return {"items": items, "page": page, "limit": limit, "total": total}
+    return _cache_get_or_set(cache_key, build_feed)
 
 @router.put("/posts/{post_id}")
 async def update_post(post_id: int, payload: PostUpdate, request: Request, db: Session = Depends(get_db)):
@@ -519,6 +581,7 @@ async def update_post(post_id: int, payload: PostUpdate, request: Request, db: S
     post.content = content
     db.commit()
     db.refresh(post)
+    _invalidate_post_cache(post.user_id)
 
     return {"success": True, "id": post.id, "content": post.content, "timestamp": post.timestamp.isoformat()}
 
@@ -535,8 +598,10 @@ async def delete_post(post_id: int, request: Request, db: Session = Depends(get_
     if post.user_id != user.id and not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    owner_id = post.user_id
     db.delete(post)
     db.commit()
+    _invalidate_post_cache(owner_id)
     return {"success": True}
 
 @router.post("/posts", response_model=PostResponse)
@@ -549,6 +614,7 @@ async def create_post(request: Request, post: PostCreate, db: Session = Depends(
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
+    _invalidate_post_cache(user.id)
     
     return {"id": new_post.id, "content": new_post.content, "author": user.name, "timestamp": new_post.timestamp}
 
@@ -570,6 +636,8 @@ async def react_to_post(post_id: int, reaction: ReactionCreate, request: Request
         db.add(new_reaction)
     
     db.commit()
+    post_owner_id = db.query(Post.user_id).filter(Post.id == post_id).scalar()
+    _invalidate_post_cache(post_owner_id)
     
     # Return updated counts
     counts = {}
@@ -599,6 +667,8 @@ async def add_comment(post_id: int, comment: CommentCreate, request: Request, db
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
+    post_owner_id = db.query(Post.user_id).filter(Post.id == post_id).scalar()
+    _invalidate_post_cache(post_owner_id)
     
     return {
         "id": new_comment.id,
@@ -622,8 +692,10 @@ async def delete_comment(post_id: int, comment_id: int, request: Request, db: Se
     if comment.user_id != user.id and not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    post_owner_id = db.query(Post.user_id).filter(Post.id == post_id).scalar()
     db.delete(comment)
     db.commit()
+    _invalidate_post_cache(post_owner_id)
     return {"success": True}
 
 @router.get("/grades", response_model=List[GradeResponse])
@@ -631,9 +703,17 @@ async def get_grades(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    grades = db.query(SubjectGrade).filter(SubjectGrade.user_id == user.id).order_by(SubjectGrade.timestamp.desc()).all()
-    return [_serialize_grade(g) for g in grades]
+
+    return _cache_get_or_set(
+        f"grades:{user.id}",
+        lambda: [
+            _serialize_grade(g)
+            for g in db.query(SubjectGrade)
+            .filter(SubjectGrade.user_id == user.id)
+            .order_by(SubjectGrade.year.asc(), SubjectGrade.semester.asc(), SubjectGrade.subject.asc(), SubjectGrade.timestamp.desc())
+            .all()
+        ],
+    )
 
 @router.post("/grades", response_model=GradeResponse)
 async def create_grade(request: Request, grade: GradeCreate, db: Session = Depends(get_db)):
@@ -682,14 +762,18 @@ async def import_grades_csv(request: Request, file: UploadFile = File(...), db: 
 async def admin_get_student_grades(student_id: int, request: Request, db: Session = Depends(get_db)):
     _require_admin_user(request, db)
     student = _get_student_or_404(db, student_id)
-    grades = (
-        db.query(SubjectGrade)
-        .filter(SubjectGrade.user_id == student.id)
-        .order_by(SubjectGrade.year.asc(), SubjectGrade.semester.asc(), SubjectGrade.subject.asc(), SubjectGrade.timestamp.desc())
-        .all()
-    )
-    gwa = compute_gwa_for_user(student.id, db)
-    return [_serialize_grade(grade, gwa) for grade in grades]
+
+    def build_student_grades():
+        gwa = compute_gwa_for_user(student.id, db)
+        grades = (
+            db.query(SubjectGrade)
+            .filter(SubjectGrade.user_id == student.id)
+            .order_by(SubjectGrade.year.asc(), SubjectGrade.semester.asc(), SubjectGrade.subject.asc(), SubjectGrade.timestamp.desc())
+            .all()
+        )
+        return [_serialize_grade(grade, gwa) for grade in grades]
+
+    return _cache_get_or_set(f"student-detail:{student.id}:grades", build_student_grades)
 
 
 @router.post("/admin/student/{student_id}/grades", response_model=GradeResponse)
@@ -988,36 +1072,40 @@ async def get_semester_gwa(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    cache_key = f"semester-gwa:{user.id}"
 
-    grades = (
-        db.query(SubjectGrade)
-        .filter(SubjectGrade.user_id == user.id)
-        .order_by(SubjectGrade.year.asc(), SubjectGrade.semester.asc(), SubjectGrade.timestamp.asc())
-        .all()
-    )
+    def build_semester_gwa():
+        grades = (
+            db.query(SubjectGrade)
+            .filter(SubjectGrade.user_id == user.id)
+            .order_by(SubjectGrade.year.asc(), SubjectGrade.semester.asc(), SubjectGrade.timestamp.asc())
+            .all()
+        )
 
-    buckets = {}
-    for g in grades:
-        if g.units is None or g.grade is None:
-            continue
+        buckets = {}
+        for g in grades:
+            if g.units is None or g.grade is None:
+                continue
 
-        subj_upper = (g.subject or "").upper()
-        if "NSTP" in subj_upper or "ROTC" in subj_upper:
-            continue
+            subj_upper = (g.subject or "").upper()
+            if "NSTP" in subj_upper or "ROTC" in subj_upper:
+                continue
 
-        key = (int(g.year or 1), int(g.semester or 1))
-        if key not in buckets:
-            buckets[key] = {"points": 0.0, "units": 0.0}
-        buckets[key]["points"] += float(g.units) * float(g.grade)
-        buckets[key]["units"] += float(g.units)
+            key = (int(g.year or 1), int(g.semester or 1))
+            if key not in buckets:
+                buckets[key] = {"points": 0.0, "units": 0.0}
+            buckets[key]["points"] += float(g.units) * float(g.grade)
+            buckets[key]["units"] += float(g.units)
 
-    series = []
-    for (year, semester) in sorted(buckets.keys()):
-        units = buckets[(year, semester)]["units"]
-        points = buckets[(year, semester)]["points"]
-        series.append({"year": year, "semester": semester, "gwa": round(points / units, 3) if units > 0 else None})
+        series = []
+        for (year, semester) in sorted(buckets.keys()):
+            units = buckets[(year, semester)]["units"]
+            points = buckets[(year, semester)]["points"]
+            series.append({"year": year, "semester": semester, "gwa": round(points / units, 3) if units > 0 else None})
 
-    return {"items": series}
+        return {"items": series}
+
+    return _cache_get_or_set(cache_key, build_semester_gwa)
 
 @router.get("/debug/students")
 async def list_students_debug(db: Session = Depends(get_db)):
@@ -1029,33 +1117,65 @@ async def get_analytics(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    return get_global_analytics(db)
+
+    return _cache_get_or_set("analytics:global", lambda: get_global_analytics(db))
 
 @router.get("/admin/students", response_model=List[dict])
 async def get_students(request: Request, page: int = 1, limit: int = 20, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
-    
-    offset = (page - 1) * limit
-    students = db.query(User).filter(User.school_id != 'admin').offset(offset).limit(limit).all()
-    
-    result = []
-    for u in students:
-        # Use cached GWA
-        gwa = compute_gwa_for_user(u.id, db)
-        failed_count = db.query(SubjectGrade).filter(SubjectGrade.user_id == u.id, SubjectGrade.grade > 3.0).count()
-        result.append({
-            "id": u.id,
-            "school_id": u.school_id,
-            "name": u.name,
-            "department": u.department,
-            "course": u.course,
-            "gwa": gwa,
-            "failed_count": failed_count
-        })
-    return result
+
+    cache_key = f"admin-students:{page}:{limit}"
+
+    def build_students():
+        offset = (page - 1) * limit
+        grade_stats = (
+            db.query(
+                SubjectGrade.user_id.label("user_id"),
+                (
+                    func.sum(SubjectGrade.units * SubjectGrade.grade)
+                    / func.nullif(func.sum(SubjectGrade.units), 0)
+                ).label("gwa"),
+                func.sum(case((SubjectGrade.grade > 3.0, 1), else_=0)).label("failed_count"),
+            )
+            .filter(SubjectGrade.units.isnot(None), SubjectGrade.grade.isnot(None))
+            .group_by(SubjectGrade.user_id)
+            .subquery()
+        )
+
+        rows = (
+            db.query(
+                User.id,
+                User.school_id,
+                User.name,
+                User.department,
+                User.course,
+                grade_stats.c.gwa,
+                grade_stats.c.failed_count,
+            )
+            .outerjoin(grade_stats, grade_stats.c.user_id == User.id)
+            .filter(User.school_id != 'admin')
+            .order_by(User.school_id.asc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        return [
+            {
+                "id": row.id,
+                "school_id": row.school_id,
+                "name": row.name,
+                "department": row.department,
+                "course": row.course,
+                "gwa": round(float(row.gwa), 3) if row.gwa is not None else None,
+                "failed_count": int(row.failed_count or 0),
+            }
+            for row in rows
+        ]
+
+    return _cache_get_or_set(cache_key, build_students)
 
 @router.post("/admin/students", response_model=UserResponse)
 async def create_student(request: Request, student: UserCreate, db: Session = Depends(get_db)):
@@ -1108,6 +1228,7 @@ async def create_student(request: Request, student: UserCreate, db: Session = De
         target_id=new_user.id,
         meta={"school_id": new_user.school_id},
     )
+    _invalidate_user_cache(new_user.id)
     
     return new_user
 
@@ -1121,6 +1242,8 @@ async def seed_filipino_names(request: Request, db: Session = Depends(get_db)):
     try:
         from init import assign_filipino_names_to_students
         updated = assign_filipino_names_to_students(db, school_id_prefix="2024")
+        api_cache.invalidate_prefix("admin-students:")
+        api_cache.invalidate_prefix("student-detail:")
         _log_admin_action(db, user, action="seed_filipino_names", meta={"updated": updated})
         return {"success": True, "updated": updated}
     except Exception as e:
@@ -1178,6 +1301,8 @@ async def seed_demo_passwords(request: Request, db: Session = Depends(get_db)):
         from init import reset_demo_student_passwords
 
         updated = reset_demo_student_passwords(db, school_id_prefix="2024", password="password123")
+        api_cache.invalidate_prefix("admin-students:")
+        api_cache.invalidate_prefix("student-detail:")
         _log_admin_action(
             db,
             user,
@@ -1212,6 +1337,7 @@ async def admin_reset_student_password(student_id: int, request: Request, db: Se
         target_id=student.id,
         meta={"school_id": student.school_id},
     )
+    _invalidate_user_cache(student.id)
 
     return {"success": True, "student_id": student.id, "school_id": student.school_id, "password": new_password}
 
@@ -1220,32 +1346,39 @@ async def get_student_detail(student_id: int, request: Request, db: Session = De
     user = get_current_user(request, db)
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
-    
-    student = db.query(User).filter(User.id == student_id).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-    
-    gwa = compute_gwa_for_user(student.id, db)
-    
-    return {
-        "id": student.id,
-        "name": student.name,
-        "school_id": student.school_id,
-        "course": student.course,
-        "department": student.department,
-        "gwa": gwa,
-        "posts": [{"id": p.id, "content": p.content} for p in student.posts],
-        "grades": [{
-            "id": g.id,
-            "subject": g.subject or "Untitled Subject",
-            "units": float(g.units) if g.units is not None else 0.0,
-            "grade": float(g.grade) if g.grade is not None else 0.0,
-            "year": int(g.year) if g.year is not None else 1,
-            "semester": int(g.semester) if g.semester is not None else 1,
-            "timestamp": g.timestamp.isoformat() if g.timestamp else None,
-            "failed": g.is_failed()
-        } for g in student.grades]
-    }
+
+    def build_student_detail():
+        student = (
+            db.query(User)
+            .options(joinedload(User.posts), joinedload(User.grades))
+            .filter(User.id == student_id)
+            .first()
+        )
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        gwa = compute_gwa_for_user(student.id, db)
+        return {
+            "id": student.id,
+            "name": student.name,
+            "school_id": student.school_id,
+            "course": student.course,
+            "department": student.department,
+            "gwa": gwa,
+            "posts": [{"id": p.id, "content": p.content} for p in student.posts],
+            "grades": [{
+                "id": g.id,
+                "subject": g.subject or "Untitled Subject",
+                "units": float(g.units) if g.units is not None else 0.0,
+                "grade": float(g.grade) if g.grade is not None else 0.0,
+                "year": int(g.year) if g.year is not None else 1,
+                "semester": int(g.semester) if g.semester is not None else 1,
+                "timestamp": g.timestamp.isoformat() if g.timestamp else None,
+                "failed": g.is_failed()
+            } for g in student.grades]
+        }
+
+    return _cache_get_or_set(f"student-detail:{student_id}", build_student_detail)
 
 @router.put("/admin/student/{student_id}", response_model=UserResponse)
 async def update_student(student_id: int, student_update: UserUpdate, request: Request, db: Session = Depends(get_db)):
@@ -1276,6 +1409,7 @@ async def update_student(student_id: int, student_update: UserUpdate, request: R
     db.commit()
     db.refresh(student)
     _log_admin_action(db, user, action="student_update", target_type="user", target_id=student.id)
+    _invalidate_user_cache(student.id)
     return student
 
 @router.delete("/admin/student/{student_id}")
@@ -1292,6 +1426,7 @@ async def delete_student(student_id: int, request: Request, db: Session = Depend
         db.delete(student)
         db.commit()
         _log_admin_action(db, user, action="student_delete", target_type="user", target_id=student_id)
+        _invalidate_user_cache(student_id)
         return {"success": True}
     except Exception as e:
         db.rollback()
@@ -1307,28 +1442,31 @@ async def get_admin_audit(request: Request, page: int = 1, limit: int = 20, db: 
     page = max(1, page)
     offset = (page - 1) * limit
 
-    q = db.query(AdminAudit).options(joinedload(AdminAudit.admin_user)).order_by(AdminAudit.timestamp.desc())
-    total = q.count()
-    items = q.offset(offset).limit(limit).all()
+    def build_audit():
+        q = db.query(AdminAudit).options(joinedload(AdminAudit.admin_user)).order_by(AdminAudit.timestamp.desc())
+        total = q.count()
+        items = q.offset(offset).limit(limit).all()
 
-    return {
-        "items": [
-            {
-                "id": a.id,
-                "admin_user_id": a.admin_user_id,
-                "admin_name": a.admin_user.name if a.admin_user else None,
-                "action": a.action,
-                "target_type": a.target_type,
-                "target_id": a.target_id,
-                "meta": json.loads(a.meta_json) if a.meta_json else {},
-                "timestamp": a.timestamp.isoformat() if a.timestamp else None,
-            }
-            for a in items
-        ],
-        "page": page,
-        "limit": limit,
-        "total": total,
-    }
+        return {
+            "items": [
+                {
+                    "id": a.id,
+                    "admin_user_id": a.admin_user_id,
+                    "admin_name": a.admin_user.name if a.admin_user else None,
+                    "action": a.action,
+                    "target_type": a.target_type,
+                    "target_id": a.target_id,
+                    "meta": json.loads(a.meta_json) if a.meta_json else {},
+                    "timestamp": a.timestamp.isoformat() if a.timestamp else None,
+                }
+                for a in items
+            ],
+            "page": page,
+            "limit": limit,
+            "total": total,
+        }
+
+    return _cache_get_or_set(f"admin-audit:{page}:{limit}", build_audit)
 
 @router.get("/admin/reports/students.csv")
 async def admin_report_students_csv(request: Request, db: Session = Depends(get_db)):

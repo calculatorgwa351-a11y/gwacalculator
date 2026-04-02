@@ -252,6 +252,26 @@ def run_lightweight_migrations():
                 with engine.begin() as conn:
                     conn.execute(text("ALTER TABLE comment ADD COLUMN parent_comment_id INTEGER"))
                 logger.info("Applied migration: added comment.parent_comment_id")
+
+        index_statements = []
+        if "subject_grade" in table_names:
+            index_statements.extend(
+                [
+                    "CREATE INDEX IF NOT EXISTS ix_subject_grade_user_year_semester ON subject_grade (user_id, year, semester)",
+                    "CREATE INDEX IF NOT EXISTS ix_subject_grade_user_grade ON subject_grade (user_id, grade)",
+                ]
+            )
+        if "post" in table_names:
+            index_statements.append("CREATE INDEX IF NOT EXISTS ix_post_user_timestamp ON post (user_id, timestamp)")
+        if "comment" in table_names:
+            index_statements.append("CREATE INDEX IF NOT EXISTS ix_comment_post_timestamp ON comment (post_id, timestamp)")
+        if "reaction" in table_names:
+            index_statements.append("CREATE INDEX IF NOT EXISTS ix_reaction_post_type ON reaction (post_id, type)")
+        if "admin_audit" in table_names:
+            index_statements.append("CREATE INDEX IF NOT EXISTS ix_admin_audit_user_timestamp ON admin_audit (admin_user_id, timestamp)")
+        with engine.begin() as conn:
+            for statement in index_statements:
+                conn.execute(text(statement))
     except Exception:
         logger.exception("Lightweight migration step failed")
 
@@ -274,6 +294,7 @@ async def startup_event():
     if settings.init_db_on_startup:
         try:
             init_database()
+            run_lightweight_migrations()
         except Exception:
             logger.exception("Startup DB initialization failed.")
             if not settings.is_production:
