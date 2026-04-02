@@ -485,37 +485,81 @@ onMounted(() => {
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 xl:gap-8">
           <div class="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none sm:p-8">
             <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-2">Average GWA</h3>
-            <div class="text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
-              <span v-if="averageGwaValue !== null">{{ averageGwaValue.toFixed(3) }}</span>
-              <span v-else-if="isLoading">...</span>
-              <span v-else>—</span>
-            </div>
-            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
-              <div
-                class="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 transition-all duration-500"
-                :style="{ width: `${averageGwaProgress ?? 0}%` }"
-              />
-            </div>
-            <div class="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">
-              {{ averageGwaLabel }}
-            </div>
+            <template v-if="averageGwaValue !== null">
+              <div class="text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
+                {{ averageGwaValue.toFixed(3) }}
+              </div>
+              <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                <div
+                  class="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 transition-all duration-500"
+                  :style="{ width: `${averageGwaProgress ?? 0}%` }"
+                />
+              </div>
+              <div class="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                {{ averageGwaLabel }}
+              </div>
+            </template>
+            <template v-else-if="isLoading">
+              <div class="mt-4 space-y-4 animate-pulse">
+                <div class="h-10 w-28 rounded-2xl bg-slate-200/80 dark:bg-slate-700/80" />
+                <div class="h-2 rounded-full bg-slate-200/80 dark:bg-slate-700/80" />
+                <div class="h-4 w-40 rounded-xl bg-slate-200/70 dark:bg-slate-700/70" />
+              </div>
+            </template>
+            <template v-else>
+              <div class="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-5 dark:border-slate-600 dark:bg-slate-900/40">
+                <div class="flex items-center gap-3">
+                  <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6m3 6V7m3 10v-4M5 19h14" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-sm font-black text-slate-900 dark:text-white">No average GWA yet</div>
+                    <div class="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Upload student grades to generate the academic average.</div>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
           <div class="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none sm:p-8">
             <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-2">Failure Rate</h3>
-            <div class="text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
-              <span v-if="failureRatePercent !== null">{{ failureRatePercent.toFixed(1) }}%</span>
-              <span v-else-if="isLoading">...</span>
-              <span v-else>—</span>
-            </div>
-            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
-              <div
-                class="h-full rounded-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 transition-all duration-500"
-                :style="{ width: `${failureRatePercent ?? 0}%` }"
-              />
-            </div>
-            <div class="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">
-              {{ failureRateLabel }}
-            </div>
+            <template v-if="failureRatePercent !== null">
+              <div class="text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
+                {{ failureRatePercent.toFixed(1) }}%
+              </div>
+              <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                <div
+                  class="h-full rounded-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 transition-all duration-500"
+                  :style="{ width: `${failureRatePercent ?? 0}%` }"
+                />
+              </div>
+              <div class="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                {{ failureRateLabel }}
+              </div>
+            </template>
+            <template v-else-if="isLoading">
+              <div class="mt-4 space-y-4 animate-pulse">
+                <div class="h-10 w-28 rounded-2xl bg-slate-200/80 dark:bg-slate-700/80" />
+                <div class="h-2 rounded-full bg-slate-200/80 dark:bg-slate-700/80" />
+                <div class="h-4 w-40 rounded-xl bg-slate-200/70 dark:bg-slate-700/70" />
+              </div>
+            </template>
+            <template v-else>
+              <div class="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-5 dark:border-slate-600 dark:bg-slate-900/40">
+                <div class="flex items-center gap-3">
+                  <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-sm font-black text-slate-900 dark:text-white">No failure rate yet</div>
+                    <div class="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Failure trends will appear once grade records are available.</div>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
           <div class="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none sm:p-8 sm:col-span-2 xl:col-span-1">
             <h3 class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-2">Total Students</h3>
