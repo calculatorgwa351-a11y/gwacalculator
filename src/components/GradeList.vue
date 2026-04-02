@@ -190,6 +190,20 @@ const overallSummary = computed(() => {
   }
 })
 
+const hasSummaryFallback = computed(() => props.summary?.gwa !== null && props.summary?.gwa !== undefined)
+
+const evaluationGwa = computed(() => {
+  if (overallSummary.value.gwa !== null) return overallSummary.value.gwa
+  return props.summary?.gwa ?? null
+})
+
+const evaluationGradeCount = computed(() => {
+  if (grades.value.length > 0) return overallSummary.value.count
+  return props.summary?.grade_count ?? 0
+})
+
+const overallFeedback = computed(() => getOverallFeedback(evaluationGwa.value))
+
 const honorsTitle = computed(() => props.summary?.honors?.title || 'No Latin Honors Yet')
 const honorsReason = computed(() => {
   if (!grades.value.length) return 'Latin honors will be evaluated automatically once your academic record is complete.'
@@ -269,18 +283,18 @@ onMounted(() => {
       {{ loadError }}
     </div>
 
-    <div v-else-if="isLoading" class="space-y-4">
+    <div v-if="isLoading" class="space-y-4">
       <div v-for="i in 3" :key="i" class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 animate-pulse">
         <div class="h-4 bg-slate-50 dark:bg-slate-700 rounded w-full mb-2"></div>
         <div class="h-4 bg-slate-50 dark:bg-slate-700 rounded w-3/4"></div>
       </div>
     </div>
 
-    <div v-else-if="grades.length === 0" class="text-center p-12 text-slate-400 dark:text-slate-500 italic">
+    <div v-else-if="grades.length === 0 && !hasSummaryFallback" class="text-center p-12 text-slate-400 dark:text-slate-500 italic">
       No grades have been uploaded yet. Your evaluation will appear here after the admin publishes your records.
     </div>
 
-    <template v-else>
+    <template v-else-if="grades.length > 0 || hasSummaryFallback">
       <section class="space-y-4">
         <div>
           <h3 class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Per Semester GWA</h3>
@@ -288,7 +302,7 @@ onMounted(() => {
             Every semester result comes with a quick performance message to help you track your progress.
           </p>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div v-if="semesterSummaries.length" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           <div
             v-for="semester in semesterSummaries"
             :key="semester.key"
@@ -309,6 +323,9 @@ onMounted(() => {
             </div>
           </div>
         </div>
+        <div v-else class="rounded-[2rem] border border-slate-100 bg-white p-5 text-sm font-medium text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+          Per-semester cards will appear as soon as the detailed grade records finish loading.
+        </div>
       </section>
 
       <section class="space-y-4">
@@ -318,7 +335,7 @@ onMounted(() => {
             Your first year to fourth year standing is computed automatically from the uploaded semester grades.
           </p>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div v-if="yearlySummaries.some((year) => year.count > 0)" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div
             v-for="year in yearlySummaries"
             :key="year.key"
@@ -332,14 +349,17 @@ onMounted(() => {
             </div>
           </div>
         </div>
+        <div v-else class="rounded-[2rem] border border-slate-100 bg-white p-5 text-sm font-medium text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+          Yearly GWA cards will appear as soon as the detailed grade records finish loading.
+        </div>
       </section>
 
       <section class="bg-gradient-to-br from-slate-900 to-blue-950 dark:from-slate-950 dark:to-slate-900 text-white p-6 rounded-[2rem] shadow-xl shadow-slate-900/20 space-y-5">
         <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
           <div>
             <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">Overall GWA</div>
-            <div class="mt-2 text-5xl font-black tracking-tight tabular-nums">{{ formatGwa(overallSummary.gwa) }}</div>
-            <div class="mt-3 text-base font-medium text-blue-50/90 leading-relaxed">{{ overallSummary.count }} uploaded subjects included in this result.</div>
+            <div class="mt-2 text-5xl font-black tracking-tight tabular-nums">{{ formatGwa(evaluationGwa) }}</div>
+            <div class="mt-3 text-base font-medium text-blue-50/90 leading-relaxed">{{ evaluationGradeCount }} uploaded subjects included in this result.</div>
           </div>
           <div class="lg:max-w-sm w-full rounded-[1.5rem] bg-white/10 border border-white/10 p-4">
             <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80">Latin Honors Standing</div>
@@ -362,8 +382,8 @@ onMounted(() => {
         </div>
 
         <div class="rounded-[1.5rem] bg-white/10 border border-white/10 px-5 py-4">
-          <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80 mb-2">{{ overallSummary.band }}</div>
-          <div class="text-base md:text-lg font-semibold leading-relaxed">{{ overallSummary.message }}</div>
+          <div class="text-xs font-black uppercase tracking-[0.16em] text-blue-200/80 mb-2">{{ overallFeedback.band }}</div>
+          <div class="text-base md:text-lg font-semibold leading-relaxed">{{ overallFeedback.message }}</div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
@@ -382,7 +402,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="space-y-4">
+      <section v-if="grades.length > 0" class="space-y-4">
         <div>
           <h3 class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Uploaded Subject Grades</h3>
           <p class="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -407,6 +427,18 @@ onMounted(() => {
               Read Only
             </div>
           </div>
+        </div>
+      </section>
+
+      <section v-else class="space-y-4">
+        <div>
+          <h3 class="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Uploaded Subject Grades</h3>
+          <p class="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+            Detailed subject rows are temporarily unavailable, but your overall standing is still shown above.
+          </p>
+        </div>
+        <div class="rounded-[2rem] border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          We could not load the detailed subject list right now. Please refresh the page or try again later.
         </div>
       </section>
     </template>
