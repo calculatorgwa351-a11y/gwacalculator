@@ -27,8 +27,29 @@ const selectedGradeStudent = ref<User | null>(null)
 const activeTab = ref<'overview' | 'analytics' | 'audit' | 'reports'>('overview')
 const resetMessage = ref('')
 const isSidebarOpen = ref(false)
+const isSavingStudent = ref(false)
+const studentFormError = ref('')
+const statusBanner = ref('')
+const isRestoringDemoData = ref(false)
+const isRenamingStudents = ref(false)
+const isResettingDemoPasswords = ref(false)
+const activePasswordResetStudentId = ref<number | null>(null)
+const toasts = ref<{ id: number; tone: 'success' | 'error' | 'info'; message: string }[]>([])
 const authStore = useAuthStore()
 const router = useRouter()
+let toastId = 0
+
+const pushToast = (message: string, tone: 'success' | 'error' | 'info' = 'success') => {
+  const id = ++toastId
+  toasts.value.push({ id, tone, message })
+  window.setTimeout(() => {
+    toasts.value = toasts.value.filter((toast) => toast.id !== id)
+  }, 4500)
+}
+
+const dismissToast = (id: number) => {
+  toasts.value = toasts.value.filter((toast) => toast.id !== id)
+}
 
 const fetchAdminData = async () => {
   isLoading.value = true
@@ -76,23 +97,27 @@ const deleteStudent = async (id: number) => {
   try {
     const res = await apiFetch(`/api/admin/student/${id}`, { method: 'DELETE' })
     if (res.ok) {
+      const deletedStudent = students.value.find((s) => s.id === id)
       students.value = students.value.filter((s) => s.id !== id)
+      pushToast(`${deletedStudent?.name ?? 'Student'} was deleted.`, 'success')
     } else {
       const data = await res.json()
-      alert(`Error: ${data.detail || 'Failed to delete student'}`)
+      pushToast(data.detail || 'Failed to delete student', 'error')
     }
   } catch (err) {
     console.error('Failed to delete student:', err)
-    alert('An unexpected error occurred. Please try again later.')
+    pushToast('An unexpected error occurred. Please try again later.', 'error')
   }
 }
 
 const openEditModal = (user: User) => {
+  studentFormError.value = ''
   selectedUser.value = user
   isModalOpen.value = true
 }
 
 const openCreateModal = () => {
+  studentFormError.value = ''
   isCreateOpen.value = true
 }
 
@@ -120,39 +145,70 @@ const handleManageGradesFromAnalytics = () => {
 }
 
 const restoreDemoData = async () => {
+  isRestoringDemoData.value = true
   try {
     const res = await apiFetch('/api/admin/seed/demo_data?student_count=12', { method: 'POST' })
     const data = await res.json()
     if (res.ok) {
       await fetchAdminData()
-      alert(
-        `Demo data restored.\nCreated students: ${data.created_students ?? 0}\nSeeded grades: ${data.seeded_grades ?? 0}`
+      statusBanner.value = 'Demo student data is ready again.'
+      pushToast(
+        `Demo data restored: ${data.created_students ?? 0} created, ${data.seeded_grades ?? 0} grades refreshed, ${data.reset_passwords ?? 0} passwords reset to password123.`,
+        'success'
       )
     } else {
-      alert(`Error: ${data.detail || 'Failed to restore demo data'}`)
+      pushToast(data.detail || 'Failed to restore demo data', 'error')
     }
   } catch (err) {
     console.error('Failed to restore demo data:', err)
-    alert('An unexpected error occurred. Please try again later.')
+    pushToast('An unexpected error occurred. Please try again later.', 'error')
+  } finally {
+    isRestoringDemoData.value = false
   }
 }
 
 const fixDummyNames = async () => {
+  isRenamingStudents.value = true
   try {
     const res = await apiFetch('/api/admin/seed/filipino_names', { method: 'POST' })
     if (res.ok) {
       await fetchAdminData()
+      statusBanner.value = 'Student names were updated to Filipino-style names.'
+      pushToast('Filipino names applied to demo students.', 'success')
     } else {
       const data = await res.json()
-      alert(`Error: ${data.detail || 'Failed to update names'}`)
+      pushToast(data.detail || 'Failed to update names', 'error')
     }
   } catch (err) {
     console.error('Failed to seed Filipino names:', err)
-    alert('An unexpected error occurred. Please try again later.')
+    pushToast('An unexpected error occurred. Please try again later.', 'error')
+  } finally {
+    isRenamingStudents.value = false
+  }
+}
+
+const resetDemoPasswords = async () => {
+  isResettingDemoPasswords.value = true
+  try {
+    const res = await apiFetch('/api/admin/seed/demo_passwords', { method: 'POST' })
+    const data = await res.json()
+    if (res.ok) {
+      statusBanner.value = 'Demo student passwords are ready to use again.'
+      pushToast(`${data.updated ?? 0} demo student passwords were reset to ${data.password ?? 'password123'}.`, 'success')
+    } else {
+      pushToast(data.detail || 'Failed to reset demo passwords', 'error')
+    }
+  } catch (err) {
+    console.error('Failed to reset demo passwords:', err)
+    pushToast('An unexpected error occurred. Please try again later.', 'error')
+  } finally {
+    isResettingDemoPasswords.value = false
   }
 }
 
 const handleSaveStudent = async (updatedUser: User) => {
+  isSavingStudent.value = true
+  studentFormError.value = ''
   try {
     const res = await apiFetch(`/api/admin/student/${updatedUser.id}`, {
       method: 'PUT',
@@ -161,18 +217,26 @@ const handleSaveStudent = async (updatedUser: User) => {
 
     if (res.ok) {
       await fetchAdminData()
+      statusBanner.value = `${updatedUser.name} was updated successfully.`
+      pushToast(`${updatedUser.name} was updated successfully.`, 'success')
       isModalOpen.value = false
     } else {
       const data = await res.json()
-      alert(`Error: ${data.detail || 'Failed to save student'}`)
+      studentFormError.value = data.detail || 'Failed to save student'
+      pushToast(studentFormError.value, 'error')
     }
   } catch (err) {
     console.error('Failed to save student:', err)
-    alert('An unexpected error occurred. Please try again later.')
+    studentFormError.value = 'An unexpected error occurred. Please try again later.'
+    pushToast(studentFormError.value, 'error')
+  } finally {
+    isSavingStudent.value = false
   }
 }
 
 const handleCreateStudent = async (payload: any) => {
+  isSavingStudent.value = true
+  studentFormError.value = ''
   try {
     const res = await apiFetch('/api/admin/students', {
       method: 'POST',
@@ -181,30 +245,40 @@ const handleCreateStudent = async (payload: any) => {
     if (res.ok) {
       isCreateOpen.value = false
       await fetchAdminData()
+      statusBanner.value = `${payload.name} was created successfully.`
+      pushToast(`${payload.name} was created successfully.`, 'success')
     } else {
       const data = await res.json()
-      alert(`Error: ${data.detail || 'Failed to create student'}`)
+      studentFormError.value = data.detail || 'Failed to create student'
+      pushToast(studentFormError.value, 'error')
     }
   } catch (err) {
     console.error('Failed to create student:', err)
-    alert('An unexpected error occurred. Please try again later.')
+    studentFormError.value = 'An unexpected error occurred. Please try again later.'
+    pushToast(studentFormError.value, 'error')
+  } finally {
+    isSavingStudent.value = false
   }
 }
 
 const resetPassword = async (student: User) => {
   if (!confirm(`Reset password for ${student.name}?`)) return
+  activePasswordResetStudentId.value = student.id
   try {
     const res = await apiFetch(`/api/admin/student/${student.id}/reset_password`, { method: 'POST' })
     const data = await res.json()
     if (res.ok) {
       resetMessage.value = `Temporary password for ${student.name}: ${data.password}`
-      alert(resetMessage.value)
+      statusBanner.value = resetMessage.value
+      pushToast(resetMessage.value, 'info')
     } else {
-      alert(`Error: ${data.detail || 'Failed to reset password'}`)
+      pushToast(data.detail || 'Failed to reset password', 'error')
     }
   } catch (err) {
     console.error('Failed to reset password:', err)
-    alert('An unexpected error occurred. Please try again later.')
+    pushToast('An unexpected error occurred. Please try again later.', 'error')
+  } finally {
+    activePasswordResetStudentId.value = null
   }
 }
 
@@ -220,6 +294,28 @@ onMounted(() => {
       class="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
       @click="isSidebarOpen = false"
     />
+
+    <div class="pointer-events-none fixed right-4 top-4 z-[70] flex w-full max-w-sm flex-col gap-3">
+      <transition-group name="toast">
+        <div
+          v-for="toast in toasts"
+          :key="toast.id"
+          class="pointer-events-auto rounded-2xl border px-4 py-3 shadow-xl backdrop-blur"
+          :class="{
+            'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200': toast.tone === 'success',
+            'border-red-200 bg-red-50 text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200': toast.tone === 'error',
+            'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200': toast.tone === 'info'
+          }"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <p class="text-sm font-semibold leading-6">{{ toast.message }}</p>
+            <button class="text-[10px] font-black uppercase tracking-[0.18em] opacity-70 transition hover:opacity-100" @click="dismissToast(toast.id)">
+              Close
+            </button>
+          </div>
+        </div>
+      </transition-group>
+    </div>
 
     <AdminSidebar :is-open="isSidebarOpen" @close="isSidebarOpen = false" />
 
@@ -248,9 +344,10 @@ onMounted(() => {
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end">
           <button
             @click="restoreDemoData"
-            class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-emerald-700 xl:w-auto"
+            :disabled="isRestoringDemoData"
+            class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70 xl:w-auto"
           >
-            Restore Demo Data
+            {{ isRestoringDemoData ? 'Restoring...' : 'Restore Demo Data' }}
           </button>
           <button
             @click="openCreateModal"
@@ -259,13 +356,30 @@ onMounted(() => {
             Create Student
           </button>
           <button
-            @click="fixDummyNames"
-            class="w-full rounded-xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:opacity-90 dark:bg-white dark:text-slate-900 sm:col-span-2 xl:w-auto"
+            @click="resetDemoPasswords"
+            :disabled="isResettingDemoPasswords"
+            class="w-full rounded-xl bg-amber-500 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-70 xl:w-auto"
           >
-            Filipino Names
+            {{ isResettingDemoPasswords ? 'Resetting...' : 'Reset Demo Passwords' }}
+          </button>
+          <button
+            @click="fixDummyNames"
+            :disabled="isRenamingStudents"
+            class="w-full rounded-xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-slate-900 sm:col-span-2 xl:w-auto"
+          >
+            {{ isRenamingStudents ? 'Renaming...' : 'Filipino Names' }}
           </button>
         </div>
       </header>
+
+      <div v-if="statusBanner" class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+        <div class="flex items-center justify-between gap-3">
+          <span>{{ statusBanner }}</span>
+          <button class="text-xs font-black uppercase tracking-[0.16em] opacity-70 hover:opacity-100" @click="statusBanner = ''">
+            Dismiss
+          </button>
+        </div>
+      </div>
 
       <div class="-mx-1 mb-8 overflow-x-auto pb-1">
         <div class="flex min-w-max items-center gap-2 px-1">
@@ -378,8 +492,8 @@ onMounted(() => {
                         <button @click="openGradeManager(s)" class="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all active:scale-95">
                           Manage Grades
                         </button>
-                        <button @click="resetPassword(s)" class="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all active:scale-95">
-                          Reset Pass
+                        <button @click="resetPassword(s)" :disabled="activePasswordResetStudentId === s.id" class="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-70">
+                          {{ activePasswordResetStudentId === s.id ? 'Resetting...' : 'Reset Pass' }}
                         </button>
                         <button @click="openEditModal(s)" class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all active:scale-95">
                           Edit
@@ -420,8 +534,8 @@ onMounted(() => {
                   <button @click="openGradeManager(s)" class="rounded-xl bg-emerald-50 px-3 py-3 text-[10px] font-black uppercase tracking-widest text-emerald-700 transition-all active:scale-[0.98] dark:bg-emerald-900/20 dark:text-emerald-300">
                     Grades
                   </button>
-                  <button @click="resetPassword(s)" class="rounded-xl bg-amber-50 px-3 py-3 text-[10px] font-black uppercase tracking-widest text-amber-700 transition-all active:scale-[0.98] dark:bg-amber-900/20 dark:text-amber-300">
-                    Reset Pass
+                  <button @click="resetPassword(s)" :disabled="activePasswordResetStudentId === s.id" class="rounded-xl bg-amber-50 px-3 py-3 text-[10px] font-black uppercase tracking-widest text-amber-700 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-amber-900/20 dark:text-amber-300">
+                    {{ activePasswordResetStudentId === s.id ? 'Resetting...' : 'Reset Pass' }}
                   </button>
                   <button @click="openEditModal(s)" class="rounded-xl bg-slate-200 px-3 py-3 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all active:scale-[0.98] dark:bg-slate-700 dark:text-slate-200">
                     Edit
@@ -449,7 +563,14 @@ onMounted(() => {
       </div>
     </main>
 
-    <StudentEditModal :is-open="isModalOpen" :user="selectedUser" @close="isModalOpen = false" @save="handleSaveStudent" />
+    <StudentEditModal
+      :is-open="isModalOpen"
+      :user="selectedUser"
+      :is-saving="isSavingStudent"
+      :error-message="studentFormError"
+      @close="isModalOpen = false"
+      @save="handleSaveStudent"
+    />
 
     <StudentAnalyticsModal
       :is-open="isAnalyticsOpen"
@@ -458,7 +579,13 @@ onMounted(() => {
       @manage-grades="handleManageGradesFromAnalytics"
     />
 
-    <StudentCreateModal v-if="isCreateOpen" @close="isCreateOpen = false" @save="handleCreateStudent" />
+    <StudentCreateModal
+      v-if="isCreateOpen"
+      :is-saving="isSavingStudent"
+      :error-message="studentFormError"
+      @close="isCreateOpen = false"
+      @save="handleCreateStudent"
+    />
 
     <AdminGradeManagerModal
       :is-open="isGradeManagerOpen"
@@ -467,3 +594,16 @@ onMounted(() => {
     />
   </div>
 </template>
+
+<style scoped>
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.2s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+</style>

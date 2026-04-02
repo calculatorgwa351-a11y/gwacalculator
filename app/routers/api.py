@@ -1143,12 +1143,14 @@ async def seed_demo_data(
             ensure_grades_for_all_students,
             ensure_posts_for_all_students,
             generate_dummy_data,
+            reset_demo_student_passwords,
         )
 
         seed_result = generate_dummy_data(db, student_count=student_count, add_if_existing=True)
         seeded_grades = ensure_grades_for_all_students(db, min_subjects=8)
         post_result = ensure_posts_for_all_students(db, min_posts=1)
         renamed_students = assign_filipino_names_to_students(db, school_id_prefix="2024")
+        reset_passwords = reset_demo_student_passwords(db, school_id_prefix="2024", password="password123")
 
         _invalidate_analytics_caches()
         result = {
@@ -1158,12 +1160,33 @@ async def seed_demo_data(
             "seeded_posts": int(seed_result.get("seeded_posts", 0)) + int(post_result.get("seeded_posts", 0)),
             "seeded_comments": int(seed_result.get("seeded_comments", 0)) + int(post_result.get("seeded_comments", 0)),
             "renamed_students": renamed_students,
+            "reset_passwords": reset_passwords,
             "skipped_existing_demo": int(seed_result.get("skipped_existing_demo", 0)),
         }
         _log_admin_action(db, user, action="seed_demo_data", meta=result)
         return {"success": True, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to seed demo data: {e}")
+
+@router.post("/admin/seed/demo_passwords")
+async def seed_demo_passwords(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user or not is_admin(user, db):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    try:
+        from init import reset_demo_student_passwords
+
+        updated = reset_demo_student_passwords(db, school_id_prefix="2024", password="password123")
+        _log_admin_action(
+            db,
+            user,
+            action="seed_demo_passwords",
+            meta={"updated": updated, "password": "password123"},
+        )
+        return {"success": True, "updated": updated, "password": "password123"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reset demo passwords: {e}")
 
 @router.post("/admin/student/{student_id}/reset_password")
 async def admin_reset_student_password(student_id: int, request: Request, db: Session = Depends(get_db)):

@@ -209,6 +209,32 @@ def ensure_posts_for_all_students(db, *, min_posts: int = 1) -> dict:
     return {"seeded_posts": seeded_posts, "seeded_comments": seeded_comments}
 
 
+def reset_demo_student_passwords(
+    db,
+    *,
+    school_id_prefix: str = "2024",
+    password: str = "password123",
+) -> int:
+    updated = 0
+    students = db.query(User).filter(User.school_id != "admin").all()
+    if not students:
+        return 0
+
+    for student in students:
+        if not student.school_id or not student.school_id.startswith(school_id_prefix):
+            continue
+        if student.check_password(password):
+            continue
+        student.set_password(password)
+        updated += 1
+
+    if updated:
+        db.commit()
+        print(f"Reset demo passwords for {updated} students")
+
+    return updated
+
+
 def generate_dummy_data(
     db=None,
     *,

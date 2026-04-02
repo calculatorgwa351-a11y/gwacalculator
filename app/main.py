@@ -213,13 +213,13 @@ def init_database():
             logger.info("No students found; demo seeding disabled.")
 
         if settings.reset_demo_passwords:
-            users = db.query(User).all()
-            for user in users:
-                password = settings.default_admin_password if user.school_id == admin_school_id else "password123"
-                if password:
-                    user.set_password(password)
-            db.commit()
-            logger.info("Reset passwords for %s users (demo mode).", len(users))
+            from init import reset_demo_student_passwords
+
+            reset_count = reset_demo_student_passwords(db, school_id_prefix="2024", password="password123")
+            if admin_user and settings.default_admin_password:
+                admin_user.set_password(settings.default_admin_password)
+                db.commit()
+            logger.info("Reset demo passwords for %s students on startup.", reset_count)
 
         if settings.seed_demo_data:
             try:
