@@ -1,5 +1,14 @@
+<<<<<<< HEAD
 import logging
 from pathlib import Path
+=======
+import asyncio
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+>>>>>>> abbdb4d (Initial commit)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +29,22 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
+<<<<<<< HEAD
+=======
+BOOTSTRAP_LOCK_ID = 934_511_207
+
+
+@dataclass
+class BootstrapState:
+    status: str = "pending"
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    error: Optional[str] = None
+
+
+bootstrap_state = BootstrapState()
+bootstrap_task: Optional[asyncio.Task] = None
+>>>>>>> abbdb4d (Initial commit)
 
 app = FastAPI(
     title="GWA Calculator",
@@ -54,8 +79,29 @@ async def security_headers_middleware(request, call_next):
 app.include_router(api.router)
 
 
+<<<<<<< HEAD
 @app.get("/api/health")
 async def health_check():
+=======
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _set_bootstrap_state(
+    *,
+    status: str,
+    started_at: Optional[str] = None,
+    finished_at: Optional[str] = None,
+    error: Optional[str] = None,
+) -> None:
+    bootstrap_state.status = status
+    bootstrap_state.started_at = started_at
+    bootstrap_state.finished_at = finished_at
+    bootstrap_state.error = error
+
+
+def _database_target() -> str:
+>>>>>>> abbdb4d (Initial commit)
     database_target = "unknown"
     try:
         parsed = make_url(settings.database_url)
@@ -67,12 +113,28 @@ async def health_check():
             database_target = f"{host}/{database}".strip("/") or settings.database_backend
     except Exception:
         database_target = settings.database_backend
+<<<<<<< HEAD
 
+=======
+    return database_target
+
+
+@app.get("/api/health")
+async def health_check():
+>>>>>>> abbdb4d (Initial commit)
     return {
         "status": "ok",
         "environment": settings.app_env,
         "database_backend": settings.database_backend,
+<<<<<<< HEAD
         "database_target": database_target,
+=======
+        "database_target": _database_target(),
+        "bootstrap_status": bootstrap_state.status,
+        "bootstrap_started_at": bootstrap_state.started_at,
+        "bootstrap_finished_at": bootstrap_state.finished_at,
+        "bootstrap_error": bootstrap_state.error,
+>>>>>>> abbdb4d (Initial commit)
     }
 
 
@@ -276,6 +338,7 @@ def run_lightweight_migrations():
         logger.exception("Lightweight migration step failed")
 
 
+<<<<<<< HEAD
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -301,6 +364,114 @@ async def startup_event():
                 raise
     else:
         logger.info("INIT_DB_ON_STARTUP is disabled; skipping startup DB initialization.")
+=======
+def _try_acquire_bootstrap_lock() -> bool:
+    if settings.database_backend != "postgresql":
+        return True
+
+    with engine.connect() as conn:
+        acquired = bool(
+            conn.execute(
+                text("SELECT pg_try_advisory_lock(:lock_id)"),
+                {"lock_id": BOOTSTRAP_LOCK_ID},
+            ).scalar()
+        )
+
+    if acquired:
+        logger.info("Bootstrap advisory lock acquired.")
+    else:
+        logger.info("Bootstrap advisory lock already held by another worker; acting as follower.")
+    return acquired
+
+
+def _release_bootstrap_lock() -> None:
+    if settings.database_backend != "postgresql":
+        return
+
+    with engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": BOOTSTRAP_LOCK_ID})
+
+
+def _run_bootstrap_sequence() -> None:
+    if not _try_acquire_bootstrap_lock():
+        _set_bootstrap_state(
+            status="ready",
+            started_at=None,
+            finished_at=_utc_now_iso(),
+            error=None,
+        )
+        return
+
+    started_at = _utc_now_iso()
+    _set_bootstrap_state(status="running", started_at=started_at, finished_at=None, error=None)
+    logger.info("Startup bootstrap started.")
+
+    try:
+        run_lightweight_migrations()
+        init_database()
+        run_lightweight_migrations()
+    except Exception as exc:
+        logger.exception("Startup bootstrap failed.")
+        _set_bootstrap_state(
+            status="failed",
+            started_at=started_at,
+            finished_at=_utc_now_iso(),
+            error=str(exc),
+        )
+        raise
+    else:
+        logger.info("Startup bootstrap completed.")
+        _set_bootstrap_state(
+            status="ready",
+            started_at=started_at,
+            finished_at=_utc_now_iso(),
+            error=None,
+        )
+    finally:
+        if settings.database_backend == "postgresql":
+            try:
+                _release_bootstrap_lock()
+            except Exception:
+                logger.exception("Failed to release bootstrap advisory lock.")
+
+
+async def _run_bootstrap_in_background() -> None:
+    try:
+        await asyncio.to_thread(_run_bootstrap_sequence)
+    except Exception:
+        # State and logging are handled inside _run_bootstrap_sequence.
+        return
+
+
+@app.on_event("startup")
+async def startup_event():
+    global bootstrap_task
+
+    logger.info("Application startup beginning.")
+    logger.info("Database backend configured: %s (%s)", settings.database_backend, _database_target())
+    _set_bootstrap_state(status="pending", started_at=None, finished_at=None, error=None)
+
+    if settings.init_db_on_startup:
+        if settings.startup_bootstrap_mode == "background":
+            logger.info("Scheduling startup bootstrap in background mode.")
+            bootstrap_task = asyncio.create_task(_run_bootstrap_in_background())
+        else:
+            logger.info("Running startup bootstrap in blocking mode.")
+            try:
+                _run_bootstrap_sequence()
+            except Exception:
+                if not settings.is_production:
+                    raise
+    else:
+        logger.info("INIT_DB_ON_STARTUP is disabled; skipping startup DB bootstrap.")
+        _set_bootstrap_state(
+            status="ready",
+            started_at=None,
+            finished_at=_utc_now_iso(),
+            error=None,
+        )
+
+>>>>>>> abbdb4d (Initial commit)
     if not _dist_ready():
         logger.warning("Frontend dist/ bundle is missing; root path will return a deployment hint page.")
 

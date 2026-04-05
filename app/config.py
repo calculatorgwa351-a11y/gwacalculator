@@ -65,6 +65,10 @@ class Settings:
     log_level: str
     secret_key: str
     database_url: str
+<<<<<<< HEAD
+=======
+    startup_bootstrap_mode: str
+>>>>>>> abbdb4d (Initial commit)
     supabase_ssl_no_verify: bool
     access_token_expire_minutes: int
     cookie_name: str
@@ -115,6 +119,12 @@ class Settings:
         if self.cookie_samesite not in {"lax", "strict", "none"}:
             raise RuntimeError("COOKIE_SAMESITE must be one of: lax, strict, none.")
 
+<<<<<<< HEAD
+=======
+        if self.startup_bootstrap_mode not in {"blocking", "background"}:
+            raise RuntimeError("STARTUP_BOOTSTRAP_MODE must be either 'blocking' or 'background'.")
+
+>>>>>>> abbdb4d (Initial commit)
         if self.is_production and self.database_backend == "sqlite" and not self.allow_sqlite_in_production:
             raise RuntimeError(
                 "Production must use Postgres/Supabase. Set DATABASE_URL or PG* env vars, "
@@ -137,6 +147,13 @@ def get_settings() -> Settings:
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         secret_key=os.getenv("SECRET_KEY", ""),
         database_url=_build_database_url(),
+<<<<<<< HEAD
+=======
+        startup_bootstrap_mode=os.getenv(
+            "STARTUP_BOOTSTRAP_MODE",
+            "background" if app_env == "production" else "blocking",
+        ).strip().lower(),
+>>>>>>> abbdb4d (Initial commit)
         supabase_ssl_no_verify=_as_bool(os.getenv("SUPABASE_SSL_NO_VERIFY"), False),
         access_token_expire_minutes=_as_int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"), 60),
         cookie_name=os.getenv("COOKIE_NAME", "access_token"),
