@@ -423,13 +423,16 @@ async def _run_bootstrap_in_background() -> None:
 async def startup_event():
     global bootstrap_task
 
-    # Check memory usage at startup
-    import psutil
-    import os
-    process = psutil.Process(os.getpid())
-    memory_info = process.memory_info()
-    memory_mb = memory_info.rss / 1024 / 1024
-    logger.info("Worker startup - Memory usage: %.2f MB, PID: %d", memory_mb, os.getpid())
+    try:
+        import psutil
+        import os
+
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        memory_mb = memory_info.rss / 1024 / 1024
+        logger.info("Worker startup - Memory usage: %.2f MB, PID: %d", memory_mb, os.getpid())
+    except ImportError:
+        logger.warning("psutil not installed; skipping startup memory usage logging.")
 
     logger.info("Application startup beginning.")
     logger.info("Database backend configured: %s (%s)", settings.database_backend, _database_target())
