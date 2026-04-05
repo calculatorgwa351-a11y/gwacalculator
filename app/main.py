@@ -107,6 +107,8 @@ def _database_target() -> str:
 
 @app.get("/api/health")
 async def health_check():
+    # For load balancer health checks, return OK immediately
+    # Bootstrap status is available but doesn't block health checks
     return {
         "status": "ok",
         "environment": settings.app_env,
