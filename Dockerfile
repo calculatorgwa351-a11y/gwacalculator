@@ -2,15 +2,12 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-<<<<<<< HEAD
-=======
 ENV NPM_CONFIG_FETCH_RETRIES=8 \
     NPM_CONFIG_FETCH_RETRY_FACTOR=2 \
     NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
     NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
     NPM_CONFIG_FETCH_TIMEOUT=300000
 
->>>>>>> abbdb4d (Initial commit)
 COPY package*.json ./
 RUN npm ci
 
@@ -29,13 +26,9 @@ FROM python:3.12-slim
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-<<<<<<< HEAD
-    PYTHONUNBUFFERED=1
-=======
     PYTHONUNBUFFERED=1 \
     PIP_DEFAULT_TIMEOUT=600 \
     PIP_RETRIES=12
->>>>>>> abbdb4d (Initial commit)
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -45,11 +38,7 @@ RUN adduser --disabled-password --gecos "" appuser
 RUN mkdir -p /data && chown -R appuser:appuser /data
 
 COPY requirements.txt ./
-<<<<<<< HEAD
-RUN pip install --no-cache-dir --default-timeout=180 --retries 8 -r requirements.txt
-=======
 RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
->>>>>>> abbdb4d (Initial commit)
 
 COPY app ./app
 COPY init.py ./init.py

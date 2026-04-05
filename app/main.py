@@ -1,14 +1,9 @@
-<<<<<<< HEAD
-import logging
-from pathlib import Path
-=======
 import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
->>>>>>> abbdb4d (Initial commit)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,8 +24,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
-<<<<<<< HEAD
-=======
+
 BOOTSTRAP_LOCK_ID = 934_511_207
 
 
@@ -44,7 +38,6 @@ class BootstrapState:
 
 bootstrap_state = BootstrapState()
 bootstrap_task: Optional[asyncio.Task] = None
->>>>>>> abbdb4d (Initial commit)
 
 app = FastAPI(
     title="GWA Calculator",
@@ -79,10 +72,6 @@ async def security_headers_middleware(request, call_next):
 app.include_router(api.router)
 
 
-<<<<<<< HEAD
-@app.get("/api/health")
-async def health_check():
-=======
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -101,7 +90,6 @@ def _set_bootstrap_state(
 
 
 def _database_target() -> str:
->>>>>>> abbdb4d (Initial commit)
     database_target = "unknown"
     try:
         parsed = make_url(settings.database_url)
@@ -113,28 +101,21 @@ def _database_target() -> str:
             database_target = f"{host}/{database}".strip("/") or settings.database_backend
     except Exception:
         database_target = settings.database_backend
-<<<<<<< HEAD
 
-=======
     return database_target
 
 
 @app.get("/api/health")
 async def health_check():
->>>>>>> abbdb4d (Initial commit)
     return {
         "status": "ok",
         "environment": settings.app_env,
         "database_backend": settings.database_backend,
-<<<<<<< HEAD
-        "database_target": database_target,
-=======
         "database_target": _database_target(),
         "bootstrap_status": bootstrap_state.status,
         "bootstrap_started_at": bootstrap_state.started_at,
         "bootstrap_finished_at": bootstrap_state.finished_at,
         "bootstrap_error": bootstrap_state.error,
->>>>>>> abbdb4d (Initial commit)
     }
 
 
@@ -338,33 +319,6 @@ def run_lightweight_migrations():
         logger.exception("Lightweight migration step failed")
 
 
-<<<<<<< HEAD
-@app.on_event("startup")
-async def startup_event():
-    try:
-        parsed = make_url(settings.database_url)
-        if settings.database_backend == "sqlite":
-            database_target = parsed.database or "sqlite"
-        else:
-            host = parsed.host or ""
-            database = parsed.database or ""
-            database_target = f"{host}/{database}".strip("/") or settings.database_backend
-    except Exception:
-        database_target = settings.database_backend
-
-    logger.info("Database backend configured: %s (%s)", settings.database_backend, database_target)
-    run_lightweight_migrations()
-    if settings.init_db_on_startup:
-        try:
-            init_database()
-            run_lightweight_migrations()
-        except Exception:
-            logger.exception("Startup DB initialization failed.")
-            if not settings.is_production:
-                raise
-    else:
-        logger.info("INIT_DB_ON_STARTUP is disabled; skipping startup DB initialization.")
-=======
 def _try_acquire_bootstrap_lock() -> bool:
     if settings.database_backend != "postgresql":
         return True
@@ -471,7 +425,6 @@ async def startup_event():
             error=None,
         )
 
->>>>>>> abbdb4d (Initial commit)
     if not _dist_ready():
         logger.warning("Frontend dist/ bundle is missing; root path will return a deployment hint page.")
 

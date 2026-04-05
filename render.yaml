@@ -48,14 +48,9 @@ services:
         sync: false
       - key: DEMO_RESET_PASSWORDS
         value: "0"
-<<<<<<< HEAD
-      - key: WEB_CONCURRENCY
-        value: "2"
-=======
       - key: STARTUP_BOOTSTRAP_MODE
         value: background
       - key: WEB_CONCURRENCY
         value: "1"
->>>>>>> abbdb4d (Initial commit)
       - key: GUNICORN_TIMEOUT
         value: "120"
