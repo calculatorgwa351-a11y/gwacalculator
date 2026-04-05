@@ -1590,33 +1590,29 @@ async def get_department_avg(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
-    
-    # Calculate weighted GWA per department
-    from sqlalchemy import func
-    
-    # Fetch all unique departments from the database
-    departments = db.query(User.department).filter(User.department != None).distinct().all()
-    dept_names = [d[0] for d in departments]
-    
+
+    rows = (
+        db.query(
+            User.department,
+            func.sum(SubjectGrade.units * SubjectGrade.grade).label("total_points"),
+            func.sum(SubjectGrade.units).label("total_units"),
+        )
+        .join(SubjectGrade, SubjectGrade.user_id == User.id)
+        .filter(
+            User.school_id != 'admin',
+            User.department.isnot(None),
+            SubjectGrade.units.isnot(None),
+            SubjectGrade.units > 0,
+            SubjectGrade.grade.isnot(None),
+        )
+        .group_by(User.department)
+        .all()
+    )
+
     result = {}
-    
-    for dept_name in dept_names:
-        # Get users in this department
-        users_in_dept = db.query(User.id).filter(User.department == dept_name).all()
-        user_ids = [u.id for u in users_in_dept]
-        
-        if not user_ids:
-            result[dept_name] = 0
-            continue
-            
-        # Calculate weighted average GWA for the entire department
-        # sum(units * grade) / sum(units)
-        avg_gwa = db.query(
-            func.sum(SubjectGrade.units * SubjectGrade.grade) / func.sum(SubjectGrade.units)
-        ).filter(SubjectGrade.user_id.in_(user_ids), SubjectGrade.units > 0).scalar()
-        
-        result[dept_name] = round(float(avg_gwa), 3) if avg_gwa else 0
-        
+    for department, total_points, total_units in rows:
+        result[department] = round(float(total_points) / float(total_units), 3) if total_units else 0
+
     return result
 
 @router.get("/analytics/failure_rates")
@@ -1624,36 +1620,27 @@ async def get_failure_rates(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
-    
-    # Calculate failure rates per department
-    # Fetch all unique departments from the database
-    departments = db.query(User.department).filter(User.department != None).distinct().all()
-    dept_names = [d[0] for d in departments]
-    
+
+    rows = (
+        db.query(
+            User.department,
+            func.count(SubjectGrade.id).label("total"),
+            func.sum(case((SubjectGrade.grade > 3.0, 1), else_=0)).label("failed"),
+        )
+        .join(SubjectGrade, SubjectGrade.user_id == User.id)
+        .filter(
+            User.school_id != 'admin',
+            User.department.isnot(None),
+            SubjectGrade.grade.isnot(None),
+        )
+        .group_by(User.department)
+        .all()
+    )
+
     result = {}
-    
-    for dept_name in dept_names:
-        # Get users in this department
-        users_in_dept = db.query(User.id).filter(User.department == dept_name).all()
-        user_ids = [u.id for u in users_in_dept]
-        
-        if not user_ids:
-            result[dept_name] = 0
-            continue
-            
-        # Count total grades and failed grades (> 3.0)
-        total_grades = db.query(SubjectGrade).filter(SubjectGrade.user_id.in_(user_ids)).count()
-        if total_grades == 0:
-            result[dept_name] = 0
-            continue
-            
-        failed_grades = db.query(SubjectGrade).filter(
-            SubjectGrade.user_id.in_(user_ids),
-            SubjectGrade.grade > 3.0
-        ).count()
-        
-        result[dept_name] = round((failed_grades / total_grades) * 100, 1)
-        
+    for department, total, failed in rows:
+        result[department] = round((failed / total) * 100, 1) if total else 0
+
     return result
 
 @router.get("/analytics/grade_distribution")
@@ -1663,31 +1650,58 @@ async def get_grade_distribution(request: Request, db: Session = Depends(get_db)
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    # Exclude the admin user from analysis.
-    student_ids = [u.id for u in db.query(User.id).filter(User.school_id != 'admin').all()]
-    if not student_ids:
-        return {"buckets": [], "total": 0}
+    bucket_cases = case(
+        (
+            ((SubjectGrade.grade >= 1.0) & (SubjectGrade.grade <= 1.25)),
+            "1.00-1.25",
+        ),
+        (
+            ((SubjectGrade.grade >= 1.26) & (SubjectGrade.grade <= 1.50)),
+            "1.26-1.50",
+        ),
+        (
+            ((SubjectGrade.grade >= 1.51) & (SubjectGrade.grade <= 1.75)),
+            "1.51-1.75",
+        ),
+        (
+            ((SubjectGrade.grade >= 1.76) & (SubjectGrade.grade <= 2.00)),
+            "1.76-2.00",
+        ),
+        (
+            ((SubjectGrade.grade >= 2.01) & (SubjectGrade.grade <= 2.50)),
+            "2.01-2.50",
+        ),
+        (
+            ((SubjectGrade.grade >= 2.51) & (SubjectGrade.grade <= 3.00)),
+            "2.51-3.00",
+        ),
+        else_="3.01-5.00",
+    ).label("bucket")
 
-    grades = db.query(SubjectGrade.grade).filter(SubjectGrade.user_id.in_(student_ids)).all()
-    values = [g[0] for g in grades if g[0] is not None]
+    rows = (
+        db.query(bucket_cases, func.count(SubjectGrade.id).label("count"))
+        .join(User, User.id == SubjectGrade.user_id)
+        .filter(User.school_id != 'admin', SubjectGrade.grade.isnot(None))
+        .group_by(bucket_cases)
+        .all()
+    )
 
-    buckets = [
-        {"label": "1.00-1.25", "min": 1.0, "max": 1.25, "count": 0},
-        {"label": "1.26-1.50", "min": 1.26, "max": 1.50, "count": 0},
-        {"label": "1.51-1.75", "min": 1.51, "max": 1.75, "count": 0},
-        {"label": "1.76-2.00", "min": 1.76, "max": 2.00, "count": 0},
-        {"label": "2.01-2.50", "min": 2.01, "max": 2.50, "count": 0},
-        {"label": "2.51-3.00", "min": 2.51, "max": 3.00, "count": 0},
-        {"label": "3.01-5.00", "min": 3.01, "max": 5.00, "count": 0}
-    ]
+    buckets = {
+        "1.00-1.25": 0,
+        "1.26-1.50": 0,
+        "1.51-1.75": 0,
+        "1.76-2.00": 0,
+        "2.01-2.50": 0,
+        "2.51-3.00": 0,
+        "3.01-5.00": 0,
+    }
 
-    for v in values:
-        for b in buckets:
-            if b["min"] <= v <= b["max"]:
-                b["count"] += 1
-                break
+    total = 0
+    for bucket, count in rows:
+        buckets[bucket] = int(count)
+        total += int(count)
 
-    return {"buckets": [{"label": b["label"], "count": b["count"]} for b in buckets], "total": len(values)}
+    return {"buckets": [{"label": key, "count": value} for key, value in buckets.items()], "total": total}
 
 @router.get("/analytics/top_bottom")
 async def get_top_bottom(request: Request, db: Session = Depends(get_db)):
@@ -1695,17 +1709,36 @@ async def get_top_bottom(request: Request, db: Session = Depends(get_db)):
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    students = db.query(User).filter(User.school_id != "admin").all()
-    scored = []
-    for s in students:
-        gwa = compute_gwa_for_user(s.id, db)
-        if gwa is None:
-            continue
-        scored.append({"id": s.id, "school_id": s.school_id, "name": s.name, "gwa": gwa})
+    gwa_subquery = (
+        db.query(
+            User.id.label("id"),
+            User.school_id.label("school_id"),
+            User.name.label("name"),
+            (func.sum(SubjectGrade.units * SubjectGrade.grade) / func.sum(SubjectGrade.units)).label("gwa"),
+        )
+        .join(SubjectGrade, SubjectGrade.user_id == User.id)
+        .filter(
+            User.school_id != 'admin',
+            SubjectGrade.units.isnot(None),
+            SubjectGrade.grade.isnot(None),
+            SubjectGrade.units > 0,
+        )
+        .group_by(User.id, User.school_id, User.name)
+        .having(func.sum(SubjectGrade.units) > 0)
+        .subquery()
+    )
 
-    scored.sort(key=lambda x: x["gwa"])
-    top = scored[:5]
-    bottom = list(reversed(scored[-5:])) if scored else []
+    top_rows = db.query(gwa_subquery).order_by(gwa_subquery.c.gwa.asc()).limit(5).all()
+    bottom_rows = db.query(gwa_subquery).order_by(gwa_subquery.c.gwa.desc()).limit(5).all()
+
+    top = [
+        {"id": row.id, "school_id": row.school_id, "name": row.name, "gwa": round(float(row.gwa), 3)}
+        for row in top_rows
+    ]
+    bottom = [
+        {"id": row.id, "school_id": row.school_id, "name": row.name, "gwa": round(float(row.gwa), 3)}
+        for row in bottom_rows
+    ]
 
     return {"top": top, "bottom": bottom}
 
@@ -1715,16 +1748,48 @@ async def get_at_risk(request: Request, db: Session = Depends(get_db)):
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    students = db.query(User).filter(User.school_id != "admin").all()
-    results = []
+    rows = (
+        db.query(
+            User.id,
+            User.school_id,
+            User.name,
+            User.department,
+            User.course,
+            func.count(SubjectGrade.id).label("grade_count"),
+            func.sum(case((SubjectGrade.grade > 3.0, 1), else_=0)).label("failed_count"),
+            func.sum(
+                case(
+                    (
+                        (SubjectGrade.units.isnot(None)) & (SubjectGrade.grade.isnot(None)),
+                        SubjectGrade.units * SubjectGrade.grade,
+                    ),
+                    else_=0.0,
+                )
+            ).label("total_points"),
+            func.sum(
+                case(
+                    (
+                        (SubjectGrade.units.isnot(None)) & (SubjectGrade.grade.isnot(None)),
+                        SubjectGrade.units,
+                    ),
+                    else_=0.0,
+                )
+            ).label("total_units"),
+        )
+        .outerjoin(SubjectGrade, SubjectGrade.user_id == User.id)
+        .filter(User.school_id != 'admin')
+        .group_by(User.id, User.school_id, User.name, User.department, User.course)
+        .all()
+    )
 
-    for s in students:
-        gwa = compute_gwa_for_user(s.id, db)
-        failed_count = db.query(SubjectGrade).filter(SubjectGrade.user_id == s.id, SubjectGrade.grade > 3.0).count()
+    results = []
+    for row in rows:
+        gwa = round(float(row.total_points) / float(row.total_units), 3) if row.total_units else None
         reasons = []
-        if gwa is None:
+
+        if row.grade_count == 0:
             reasons.append("No grades")
-        if failed_count > 0:
+        if row.failed_count and int(row.failed_count) > 0:
             reasons.append("Has failing grades")
         if gwa is not None and gwa > 2.5:
             reasons.append("GWA above 2.50")
@@ -1732,13 +1797,13 @@ async def get_at_risk(request: Request, db: Session = Depends(get_db)):
         if reasons:
             results.append(
                 {
-                    "id": s.id,
-                    "school_id": s.school_id,
-                    "name": s.name,
-                    "department": s.department,
-                    "course": s.course,
+                    "id": row.id,
+                    "school_id": row.school_id,
+                    "name": row.name,
+                    "department": row.department,
+                    "course": row.course,
                     "gwa": gwa,
-                    "failed_count": failed_count,
+                    "failed_count": int(row.failed_count or 0),
                     "reasons": reasons,
                 }
             )
