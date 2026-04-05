@@ -107,6 +107,14 @@ def _database_target() -> str:
 
 @app.get("/api/health")
 async def health_check():
+    import psutil
+    import os
+
+    # Get memory usage
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    memory_mb = memory_info.rss / 1024 / 1024
+
     # For load balancer health checks, return OK immediately
     # Bootstrap status is available but doesn't block health checks
     return {
@@ -118,6 +126,8 @@ async def health_check():
         "bootstrap_started_at": bootstrap_state.started_at,
         "bootstrap_finished_at": bootstrap_state.finished_at,
         "bootstrap_error": bootstrap_state.error,
+        "memory_usage_mb": round(memory_mb, 2),
+        "worker_pid": os.getpid(),
     }
 
 
@@ -246,32 +256,42 @@ def init_database():
         student_count = db.query(User).filter(User.school_id != admin_school_id).count()
         if settings.seed_demo_data:
             try:
+                # Import only when needed to save memory
                 from init import generate_dummy_data
-
-                seed_result = generate_dummy_data(db, student_count=12, add_if_existing=True)
+                # Use smaller batch size to reduce memory usage
+                seed_result = generate_dummy_data(db, student_count=6, add_if_existing=True)
                 created_students = int(seed_result.get("created_students", 0))
                 if created_students > 0:
                     logger.info("Generated %s demo students.", created_students)
+                    # Force garbage collection after memory-intensive operations
+                    import gc
+                    gc.collect()
             except Exception:
                 logger.exception("Failed to generate dummy data")
         elif student_count == 0:
             logger.info("No students found; demo seeding disabled.")
 
         if settings.reset_demo_passwords:
-            from init import reset_demo_student_passwords
-
-            reset_count = reset_demo_student_passwords(db, school_id_prefix="2024", password="password123")
-            if admin_user and settings.default_admin_password:
-                admin_user.set_password(settings.default_admin_password)
-                db.commit()
-            logger.info("Reset demo passwords for %s students on startup.", reset_count)
+            try:
+                # Import only when needed
+                from init import reset_demo_student_passwords
+                reset_count = reset_demo_student_passwords(db, school_id_prefix="2024", password="password123")
+                if admin_user and settings.default_admin_password:
+                    admin_user.set_password(settings.default_admin_password)
+                    db.commit()
+                logger.info("Reset demo passwords for %s students on startup.", reset_count)
+            except Exception:
+                logger.exception("Failed to reset demo passwords")
 
         if settings.seed_demo_data:
             try:
+                # Import only when needed and use smaller operations
                 from init import ensure_grades_for_all_students, ensure_posts_for_all_students
-
-                ensure_grades_for_all_students(db, min_subjects=8)
+                ensure_grades_for_all_students(db, min_subjects=4)  # Reduced from 8
                 ensure_posts_for_all_students(db, min_posts=1)
+                # Force garbage collection
+                import gc
+                gc.collect()
             except Exception:
                 logger.exception("Failed to ensure demo grades/posts for students")
 
@@ -402,6 +422,14 @@ async def _run_bootstrap_in_background() -> None:
 @app.on_event("startup")
 async def startup_event():
     global bootstrap_task
+
+    # Check memory usage at startup
+    import psutil
+    import os
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    memory_mb = memory_info.rss / 1024 / 1024
+    logger.info("Worker startup - Memory usage: %.2f MB, PID: %d", memory_mb, os.getpid())
 
     logger.info("Application startup beginning.")
     logger.info("Database backend configured: %s (%s)", settings.database_backend, _database_target())
