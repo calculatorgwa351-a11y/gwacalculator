@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { User } from '@/types'
+import { apiFetch } from '@/utils/apiClient'
 
 const props = defineProps<{
   students: User[]
 }>()
 
 const searchTerm = ref('')
+const isDownloadingCsv = ref(false)
+const downloadingStudentId = ref<number | null>(null)
+const actionError = ref('')
 
 const filtered = computed(() => {
   if (!searchTerm.value) return props.students
@@ -19,12 +23,71 @@ const filtered = computed(() => {
   )
 })
 
-const openCsv = () => {
-  window.open('/api/admin/reports/students.csv', '_blank')
+const getFilenameFromDisposition = (disposition: string | null, fallback: string) => {
+  if (!disposition) return fallback
+
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1])
+
+  const asciiMatch = disposition.match(/filename="?([^"]+)"?/i)
+  return asciiMatch?.[1] || fallback
 }
 
-const openStudentReport = (id: number) => {
-  window.open(`/api/admin/reports/student/${id}.html`, '_blank')
+const triggerBrowserDownload = (blob: Blob, filename: string) => {
+  const downloadUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = downloadUrl
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
+const downloadFile = async (url: string, fallbackFilename: string) => {
+  const res = await apiFetch(url)
+  if (!res.ok) {
+    let message = 'Failed to download report.'
+    try {
+      const data = await res.json()
+      message = data.detail || message
+    } catch {
+      // Ignore JSON parse failures and keep the generic message.
+    }
+    throw new Error(message)
+  }
+
+  const blob = await res.blob()
+  const filename = getFilenameFromDisposition(res.headers.get('content-disposition'), fallbackFilename)
+  triggerBrowserDownload(blob, filename)
+}
+
+const openCsv = async () => {
+  if (isDownloadingCsv.value) return
+  isDownloadingCsv.value = true
+  actionError.value = ''
+
+  try {
+    await downloadFile('/api/admin/reports/students.csv', 'students_report.csv')
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : 'Failed to download CSV.'
+  } finally {
+    isDownloadingCsv.value = false
+  }
+}
+
+const openStudentReport = async (student: User) => {
+  if (downloadingStudentId.value === student.id) return
+  downloadingStudentId.value = student.id
+  actionError.value = ''
+
+  try {
+    await downloadFile(`/api/admin/reports/student/${student.id}.html`, `${student.school_id}_report.html`)
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : 'Failed to download student report.'
+  } finally {
+    downloadingStudentId.value = null
+  }
 }
 </script>
 
@@ -37,10 +100,18 @@ const openStudentReport = (id: number) => {
       </div>
       <button
         @click="openCsv"
+        :disabled="isDownloadingCsv"
         class="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all"
       >
-        Download CSV
+        {{ isDownloadingCsv ? 'Downloading...' : 'Download CSV' }}
       </button>
+    </div>
+
+    <div
+      v-if="actionError"
+      class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+    >
+      {{ actionError }}
     </div>
 
     <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
@@ -72,10 +143,11 @@ const openStudentReport = (id: number) => {
               </td>
               <td class="px-8 py-5 text-right">
                 <button
-                  @click="openStudentReport(s.id)"
+                  @click="openStudentReport(s)"
+                  :disabled="downloadingStudentId === s.id"
                   class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
                 >
-                  Open Report
+                  {{ downloadingStudentId === s.id ? 'Downloading...' : 'Download Report' }}
                 </button>
               </td>
             </tr>

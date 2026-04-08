@@ -13,6 +13,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/utils/apiClient'
 
+const ADMIN_STUDENT_FETCH_LIMIT = 500
+
 const students = ref<User[]>([])
 const analytics = ref<Analytics | null>(null)
 const isLoading = ref(true)
@@ -66,7 +68,7 @@ const fetchAdminData = async () => {
     }
 
     const [studentsRes, analyticsRes] = await Promise.all([
-      apiFetch('/api/admin/students'),
+      apiFetch(`/api/admin/students?page=1&limit=${ADMIN_STUDENT_FETCH_LIMIT}`),
       apiFetch('/api/analytics')
     ])
 

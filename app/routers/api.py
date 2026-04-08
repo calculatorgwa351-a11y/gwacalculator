@@ -1126,6 +1126,9 @@ async def get_students(request: Request, page: int = 1, limit: int = 20, db: Ses
     if not user or not is_admin(user, db):
         raise HTTPException(status_code=403, detail="Admin access required")
 
+    page = max(1, page)
+    limit = max(1, min(limit, 500))
+
     cache_key = f"admin-students:{page}:{limit}"
 
     def build_students():
