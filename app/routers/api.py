@@ -990,10 +990,10 @@ async def admin_import_grades_csv(request: Request, file: UploadFile = File(...)
                     raise ValueError(f"invalid id: {raw_id}") from exc
 
                 target = db.query(SubjectGrade).filter(SubjectGrade.id == grade_id).first()
-                if not target:
-                    raise ValueError(f"grade id not found: {grade_id}")
-                if target.user_id != student.id:
-                    raise ValueError(f"grade id {grade_id} does not belong to school_id {school_id}")
+                # Treat CSV id as an optional hint so files exported from a
+                # different environment still import using subject/year/semester.
+                if target and target.user_id != student.id:
+                    target = None
 
             normalized_rows.append(
                 {

@@ -181,7 +181,7 @@ const onImportFileChange = async (event: Event) => {
       method: 'POST',
       body: formData
     })
-    const data = (await res.json().catch(() => ({}))) as AdminGradeImportResponse
+    const data = (await res.json().catch(() => ({}))) as AdminGradeImportResponse & { detail?: string }
     importResult.value = {
       success: !!res.ok,
       inserted: data.inserted || 0,
@@ -193,7 +193,7 @@ const onImportFileChange = async (event: Event) => {
     if (res.ok) {
       await fetchGrades()
     } else if (!importResult.value.errors.length) {
-      errorMessage.value = 'Import failed.'
+      errorMessage.value = data.detail || 'Import failed.'
     }
   } catch (err) {
     console.error('Failed to import grades:', err)
